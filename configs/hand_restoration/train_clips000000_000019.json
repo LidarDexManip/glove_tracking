@@ -24,7 +24,7 @@
     "controlnet_model_id": null
   },
   "training": {
-    "output_dir": "outputs/hand_restoration/clips000000_000019_train16_val4",
+    "output_dir": "outputs/hand_restoration/clips000000_000019_train16_val4_512_raster_visible",
     "num_train_epochs": 10,
     "max_train_steps": null,
     "batch_size": 4,

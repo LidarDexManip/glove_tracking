@@ -61,9 +61,9 @@
         "bytes": 97986560,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 143,
+        "final_samples": 142,
         "tar_readable": true,
-        "c1_visible_right_frames": 143
+        "c1_visible_right_frames": 142
       },
       "clip-000004": {
         "bytes": 104622080,
@@ -133,25 +133,25 @@
         "bytes": 101519360,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 118,
+        "final_samples": 117,
         "tar_readable": true,
-        "c1_visible_right_frames": 118
+        "c1_visible_right_frames": 117
       },
       "clip-000013": {
         "bytes": 103024640,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 139,
+        "final_samples": 137,
         "tar_readable": true,
-        "c1_visible_right_frames": 139
+        "c1_visible_right_frames": 137
       },
       "clip-000014": {
         "bytes": 104161280,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 64,
+        "final_samples": 63,
         "tar_readable": true,
-        "c1_visible_right_frames": 64
+        "c1_visible_right_frames": 63
       },
       "clip-000015": {
         "bytes": 104089600,
@@ -194,7 +194,7 @@
         "c1_visible_right_frames": 150
       }
     },
-    "train_samples": 2264,
+    "train_samples": 2259,
     "holdout_samples": 600
   }
 }

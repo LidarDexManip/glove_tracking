@@ -94,37 +94,16 @@ class Hot3DSingleFrameDataset(Dataset):
                         if self.camera_id not in cameras:
                             continue
                         c1_camera = build_canonical_camera(cameras[self.camera_id], -90.0)
-                        if not self._mano_has_c1_visibility(hands, betas, c1_camera):
+                        try:
+                            self._render_mano(hands, betas, c1_camera)
+                        except RuntimeError as exc:
+                            if "empty mask" not in str(exc):
+                                raise
                             continue
                     selected.append((path, key))
                     if limit is not None and len(selected) >= limit:
                         break
         return selected
-
-    def _mano_has_c1_visibility(self, hands_data: dict, betas: torch.Tensor, camera) -> bool:
-        visible_vertices = 0
-        for hand in self.hands:
-            pose = hands_data[hand]["mano_pose"]
-            output = self.models[hand](
-                betas=betas,
-                global_orient=torch.tensor(pose["wrist_xform"][:3], dtype=torch.float32).view(1, 3),
-                hand_pose=torch.tensor(pose["thetas"], dtype=torch.float32).view(1, -1),
-                transl=torch.tensor(pose["wrist_xform"][3:], dtype=torch.float32).view(1, 3),
-                return_verts=True,
-            )
-            vertices = output.vertices[0].detach().cpu().numpy()
-            window = camera.world_to_window(vertices)
-            eye = camera.world_to_eye(vertices)
-            valid = (
-                np.isfinite(window).all(axis=1)
-                & (eye[:, 2] > 0.0)
-                & (window[:, 0] >= 0.0)
-                & (window[:, 0] < camera.width)
-                & (window[:, 1] >= 0.0)
-                & (window[:, 1] < camera.height)
-            )
-            visible_vertices += int(valid.sum())
-        return visible_vertices >= self.min_visible_mano_vertices
 
     @staticmethod
     def _resize(image: np.ndarray, size: int, interpolation: int) -> np.ndarray:
