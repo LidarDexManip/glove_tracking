@@ -50,6 +50,8 @@ class Hot3DSingleFrameDataset(Dataset):
         condition: ConditionConfig | None = None,
         seed: int = 0,
         include_numpy: bool = True,
+        require_mano_in_frame: bool = False,
+        min_visible_mano_vertices: int = 1,
     ) -> None:
         if hands not in {"left", "right", "both"}:
             raise ValueError("hands must be left, right, or both")
@@ -65,6 +67,8 @@ class Hot3DSingleFrameDataset(Dataset):
         self.grayscale = bool(grayscale)
         self.frame_start = max(0, int(frame_start))
         self.include_numpy = include_numpy
+        self.require_mano_in_frame = bool(require_mano_in_frame)
+        self.min_visible_mano_vertices = max(1, int(min_visible_mano_vertices))
         self.condition_builder = ConditionBuilder(condition or ConditionConfig(), seed=seed)
         self.models = {hand: load_mano_model_torch(hand) for hand in self.hands}
         self.samples: list[tuple[Path, str]] = []
@@ -76,15 +80,51 @@ class Hot3DSingleFrameDataset(Dataset):
     def _index_clip(self, path: Path, stride: int, limit: int | None) -> list[tuple[Path, str]]:
         selected: list[tuple[Path, str]] = []
         with tarfile.open(path, "r") as tar:
+            betas = None
+            if self.require_mano_in_frame:
+                shapes = json.load(tar.extractfile("__hand_shapes.json__"))
+                betas = torch.tensor(shapes["mano"], dtype=torch.float32).view(1, -1)
             keys = sorted(name.split(".info.json")[0] for name in tar.getnames() if name.endswith(".info.json"))
             keys = [key for key in keys if int(key) >= self.frame_start]
             for key in keys[::max(1, stride)]:
                 hands = clip_util.load_hand_annotations(tar, key)
                 if hands is not None and all(hand in hands and "mano_pose" in hands[hand] for hand in self.hands):
+                    if self.require_mano_in_frame:
+                        cameras, _ = clip_util.load_cameras(tar, key)
+                        if self.camera_id not in cameras:
+                            continue
+                        c1_camera = build_canonical_camera(cameras[self.camera_id], -90.0)
+                        if not self._mano_has_c1_visibility(hands, betas, c1_camera):
+                            continue
                     selected.append((path, key))
                     if limit is not None and len(selected) >= limit:
                         break
         return selected
+
+    def _mano_has_c1_visibility(self, hands_data: dict, betas: torch.Tensor, camera) -> bool:
+        visible_vertices = 0
+        for hand in self.hands:
+            pose = hands_data[hand]["mano_pose"]
+            output = self.models[hand](
+                betas=betas,
+                global_orient=torch.tensor(pose["wrist_xform"][:3], dtype=torch.float32).view(1, 3),
+                hand_pose=torch.tensor(pose["thetas"], dtype=torch.float32).view(1, -1),
+                transl=torch.tensor(pose["wrist_xform"][3:], dtype=torch.float32).view(1, 3),
+                return_verts=True,
+            )
+            vertices = output.vertices[0].detach().cpu().numpy()
+            window = camera.world_to_window(vertices)
+            eye = camera.world_to_eye(vertices)
+            valid = (
+                np.isfinite(window).all(axis=1)
+                & (eye[:, 2] > 0.0)
+                & (window[:, 0] >= 0.0)
+                & (window[:, 0] < camera.width)
+                & (window[:, 1] >= 0.0)
+                & (window[:, 1] < camera.height)
+            )
+            visible_vertices += int(valid.sum())
+        return visible_vertices >= self.min_visible_mano_vertices
 
     @staticmethod
     def _resize(image: np.ndarray, size: int, interpolation: int) -> np.ndarray:

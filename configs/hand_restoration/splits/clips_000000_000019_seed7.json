@@ -38,143 +38,163 @@
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000001": {
         "bytes": 102819840,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000002": {
         "bytes": 104765440,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000003": {
         "bytes": 97986560,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 150,
-        "tar_readable": true
+        "final_samples": 143,
+        "tar_readable": true,
+        "c1_visible_right_frames": 143
       },
       "clip-000004": {
         "bytes": 104622080,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000005": {
         "bytes": 105625600,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000006": {
         "bytes": 104437760,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000007": {
         "bytes": 103587840,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000008": {
         "bytes": 105287680,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000009": {
         "bytes": 105410560,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000010": {
         "bytes": 103362560,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000011": {
         "bytes": 102758400,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000012": {
         "bytes": 101519360,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 150,
-        "tar_readable": true
+        "final_samples": 118,
+        "tar_readable": true,
+        "c1_visible_right_frames": 118
       },
       "clip-000013": {
         "bytes": 103024640,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 150,
-        "tar_readable": true
+        "final_samples": 139,
+        "tar_readable": true,
+        "c1_visible_right_frames": 139
       },
       "clip-000014": {
         "bytes": 104161280,
         "total_frames": 150,
         "right_mano_frames": 150,
-        "final_samples": 150,
-        "tar_readable": true
+        "final_samples": 64,
+        "tar_readable": true,
+        "c1_visible_right_frames": 64
       },
       "clip-000015": {
         "bytes": 104089600,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000016": {
         "bytes": 101703680,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000017": {
         "bytes": 100352000,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000018": {
         "bytes": 102113280,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       },
       "clip-000019": {
         "bytes": 101969920,
         "total_frames": 150,
         "right_mano_frames": 150,
         "final_samples": 150,
-        "tar_readable": true
+        "tar_readable": true,
+        "c1_visible_right_frames": 150
       }
     },
-    "train_samples": 2400,
+    "train_samples": 2264,
     "holdout_samples": 600
   }
 }

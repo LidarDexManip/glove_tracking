@@ -8,7 +8,9 @@
     "output_size": 512,
     "grayscale": true,
     "frame_start": 0,
-    "frame_stride": 1
+    "frame_stride": 1,
+    "require_mano_in_frame": true,
+    "min_visible_mano_vertices": 1
   },
   "condition": {"mode": "masked_replace", "mask_dilation_px": 1, "boundary_corruption_px": 3, "wrist_extension_px": 0, "background_fill": "gray"},
   "model": {"base_model_id": "runwayml/stable-diffusion-v1-5", "controlnet_model_id": null},

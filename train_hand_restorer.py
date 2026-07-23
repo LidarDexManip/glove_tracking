@@ -56,6 +56,8 @@ def make_dataset(config: dict, clip_tars: list[str], include_numpy: bool = False
         condition=ConditionConfig(**config.get("condition", {})),
         seed=config.get("seed", 0),
         include_numpy=include_numpy,
+        require_mano_in_frame=data.get("require_mano_in_frame", False),
+        min_visible_mano_vertices=data.get("min_visible_mano_vertices", 1),
     )
 
 

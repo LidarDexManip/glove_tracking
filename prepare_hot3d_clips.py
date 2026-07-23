@@ -6,6 +6,7 @@ import json
 import shutil
 import tarfile
 from pathlib import Path
+from collections import Counter
 
 from huggingface_hub import hf_hub_download
 from hot3d.hot3d.clips import clip_util
@@ -48,7 +49,7 @@ def main() -> int:
     paths = [Path(path) for path in manifest["train"] + manifest["holdout"]]
     failures = []
     stats = {}
-    print("clip\tstatus\tMiB\ttotal\tright_mano\tfinal_samples")
+    print("clip\tstatus\tMiB\ttotal\tright_mano\tannotation_candidates")
     for path in paths:
         path.parent.mkdir(parents=True, exist_ok=True)
         if args.download and (args.force or not path.exists()):
@@ -70,6 +71,26 @@ def main() -> int:
         if not item["final_samples"]:
             failures.append(f"no usable right-hand samples: {path}")
         print(f"{path.stem}\t{status}\t{item['bytes'] / 1024**2:.1f}\t{item['total_frames']}\t{item['right_mano_frames']}\t{item['final_samples']}")
+    if not failures:
+        from hand_restoration.config import load_json_config
+        from hand_restoration.data_config import resolve_clip_splits
+        from train_hand_restorer import make_dataset
+
+        training_config = load_json_config("configs/hand_restoration/train_clips000000_000019.json")
+        train_clips, holdout_clips, _ = resolve_clip_splits(training_config, Path.cwd())
+        for clip_paths in (train_clips, holdout_clips):
+            dataset = make_dataset(training_config, clip_paths)
+            visible_counts = Counter(path.stem for path, _ in dataset.samples)
+            for clip_path in clip_paths:
+                stem = Path(clip_path).stem
+                stats[stem]["c1_visible_right_frames"] = visible_counts[stem]
+                stats[stem]["final_samples"] = visible_counts[stem]
+
+    if not failures:
+        print("\nclip\tc1_visible_final_samples")
+        for path in paths:
+            print(f"{path.stem}\t{stats[path.stem]['final_samples']}")
+
     manifest["statistics"] = {
         "status": "complete" if not failures else "incomplete",
         "camera_id": "1201-2",
