@@ -28,173 +28,153 @@
     "data/train_quest3/clip-000019.tar"
   ],
   "statistics": {
-    "status": "incomplete",
+    "status": "complete",
     "camera_id": "1201-2",
     "hands": "right",
     "frame_stride": 1,
     "clips": {
       "clip-000000": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 102440960,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000001": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 102819840,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000002": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 104765440,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000003": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 97986560,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000004": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 104622080,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000005": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 105625600,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000006": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 104437760,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000007": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 103587840,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000008": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 105287680,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000009": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 105410560,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000010": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 103362560,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000011": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 102758400,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000012": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 101519360,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000013": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 103024640,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000014": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 104161280,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000015": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 104089600,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000016": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 101703680,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000017": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 100352000,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000018": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 102113280,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       },
       "clip-000019": {
-        "status": "missing",
-        "bytes": null,
-        "total_frames": null,
-        "right_mano_frames": null,
-        "final_samples": null,
-        "tar_readable": false
+        "bytes": 101969920,
+        "total_frames": 150,
+        "right_mano_frames": 150,
+        "final_samples": 150,
+        "tar_readable": true
       }
     },
-    "train_samples": 0,
-    "holdout_samples": 0
+    "train_samples": 2400,
+    "holdout_samples": 600
   }
 }

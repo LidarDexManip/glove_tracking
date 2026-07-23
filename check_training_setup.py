@@ -9,9 +9,11 @@ import sys
 from pathlib import Path
 
 from hand_restoration.data_config import resolve_clip_splits
+from hot3d_glove_torch_utils import patch_legacy_dependencies
 
 
 REQUIRED_IMPORTS = {
+    "chumpy": "chumpy",
     "accelerate": "accelerate",
     "cv2": "opencv-python",
     "diffusers": "diffusers",
@@ -52,6 +54,7 @@ def main() -> int:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     print(f"[OK] config: {config_path}")
 
+    patch_legacy_dependencies()
     for module_name, package_name in REQUIRED_IMPORTS.items():
         try:
             importlib.import_module(module_name)
