@@ -18,13 +18,14 @@ def main() -> None:
     parser.add_argument("--pretrained", action="store_true", help="Preview the untrained ControlNet initialized from public SD 1.5 weights.")
     parser.add_argument("--sample-index", type=int, default=0)
     parser.add_argument("--split", choices=("train", "validation"), default="train", help="Select the clip-disjoint dataset side when using a split manifest.")
+    parser.add_argument("--clip", default=None, help="Select one clip, e.g. clip-000017 or 000017; it must belong to --split.")
     parser.add_argument("--frame", type=int, default=None, help="Load this exact frame ID instead of using --sample-index.")
     parser.add_argument("--steps", type=int, default=None, help="Override configured diffusion steps; useful for fast baseline previews.")
     args = parser.parse_args()
     if (args.checkpoint is None) == (not args.pretrained):
         parser.error("Provide --checkpoint for a trained model, or use --pretrained (but not both).")
     config = load_json_config(args.config)
-    sample = load_sample(config, frame_id=args.frame, sample_index=args.sample_index, split=args.split)
+    sample = load_sample(config, frame_id=args.frame, sample_index=args.sample_index, split=args.split, clip_name=args.clip)
     restorer = build_restorer(config)
     if args.checkpoint is not None:
         restorer.load_controlnet(args.checkpoint)

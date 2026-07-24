@@ -42,6 +42,7 @@ def load_sample(
     frame_id: int | None = None,
     sample_index: int = 0,
     split: str = "train",
+    clip_name: str | None = None,
 ) -> dict:
     data = config["data"]
     if split not in {"train", "validation"}:
@@ -50,6 +51,13 @@ def load_sample(
     clip_tars = train_clips if split == "train" else val_clips
     if not clip_tars:
         raise ValueError(f"No {split} clips configured.")
+    if clip_name is not None:
+        normalized = Path(clip_name).stem
+        if normalized.isdigit():
+            normalized = f"clip-{int(normalized):06d}"
+        clip_tars = [path for path in clip_tars if Path(path).stem == normalized]
+        if not clip_tars:
+            raise ValueError(f"Clip {clip_name} is not part of the configured {split} split.")
     exact_frame = frame_id is not None
     frame_start = int(frame_id) if exact_frame else data.get("frame_start", 0)
     dataset = Hot3DSingleFrameDataset(
