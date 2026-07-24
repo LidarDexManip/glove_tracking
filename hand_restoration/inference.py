@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from .conditions import ConditionConfig
+from .data_config import resolve_clip_splits
 from .diffusion import ControlNetHandRestorer, DiffusionConfig
 from .hot3d_dataset import Hot3DSingleFrameDataset
 from .visualize import rgb_float_to_u8, save_debug_grid
@@ -36,12 +37,23 @@ def psnr(pred: np.ndarray, target: np.ndarray, mask: np.ndarray | None = None) -
     return float("inf") if mse == 0 else float(10 * np.log10(1.0 / mse))
 
 
-def load_sample(config: dict, frame_id: int | None = None, sample_index: int = 0) -> dict:
+def load_sample(
+    config: dict,
+    frame_id: int | None = None,
+    sample_index: int = 0,
+    split: str = "train",
+) -> dict:
     data = config["data"]
+    if split not in {"train", "validation"}:
+        raise ValueError("split must be train or validation")
+    train_clips, val_clips, _ = resolve_clip_splits(config, Path(__file__).resolve().parents[1])
+    clip_tars = train_clips if split == "train" else val_clips
+    if not clip_tars:
+        raise ValueError(f"No {split} clips configured.")
     exact_frame = frame_id is not None
     frame_start = int(frame_id) if exact_frame else data.get("frame_start", 0)
     dataset = Hot3DSingleFrameDataset(
-        clip_tars=data["clip_tars"],
+        clip_tars=clip_tars,
         mano_model_dir=data["mano_model_dir"],
         camera_id=data.get("camera_id", "1201-2"),
         hands=data.get("hands", "right"),
@@ -52,6 +64,8 @@ def load_sample(config: dict, frame_id: int | None = None, sample_index: int = 0
         max_frames_per_clip=1 if exact_frame else data.get("max_frames_per_clip"),
         condition=ConditionConfig(**config.get("condition", {})),
         seed=config.get("seed", 0),
+        require_mano_in_frame=data.get("require_mano_in_frame", False),
+        min_visible_mano_vertices=data.get("min_visible_mano_vertices", 1),
     )
     if exact_frame:
         sample_index = 0
