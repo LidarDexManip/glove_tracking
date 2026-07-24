@@ -1,0 +1,45 @@
+{
+  "seed": 7,
+  "data": {
+    "format": "derived_webdataset",
+    "source_split_json": "configs/hand_restoration/splits/train_quest3_sequence_seed7.json",
+    "train_manifest": "data/derived/train_quest3_c1/train_manifest.jsonl",
+    "val_manifest": "data/derived/train_quest3_c1/holdout_manifest.jsonl",
+    "camera_id": "1201-2",
+    "hands": "right",
+    "output_size": 512,
+    "grayscale": true
+  },
+  "condition": {
+    "mode": "masked_replace",
+    "mask_dilation_px": 1,
+    "boundary_corruption_px": 3,
+    "wrist_extension_px": 0,
+    "background_fill": "gray"
+  },
+  "model": {"base_model_id": "runwayml/stable-diffusion-v1-5", "controlnet_model_id": null},
+  "training": {
+    "output_dir": "outputs/hand_restoration/train_quest3_sequence_derived_smoke",
+    "max_train_steps": 10,
+    "batch_size": 4,
+    "validation_batch_size": 4,
+    "gradient_accumulation_steps": 1,
+    "mixed_precision": "bf16",
+    "learning_rate": 0.00002,
+    "lr_scheduler": "constant",
+    "warmup_steps": 0,
+    "max_grad_norm": 1.0,
+    "num_workers": 2,
+    "pin_memory": true,
+    "persistent_workers": true,
+    "prefetch_factor": 2,
+    "max_train_samples": 40,
+    "max_validation_samples": 16,
+    "log_every": 1,
+    "csv_log_every": 1,
+    "checkpoint_every": 10,
+    "validation_every": 10,
+    "validation_seed": 7,
+    "use_wandb": false
+  }
+}

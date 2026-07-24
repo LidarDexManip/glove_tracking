@@ -70,29 +70,43 @@ def main() -> int:
         fail("HOT3D submodule is absent; run git submodule update --init --recursive", failures)
 
     data_config = config["data"]
-    try:
-        train_clips, val_clips, split_path = resolve_clip_splits(config, root)
-    except (KeyError, ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
-        fail(f"Invalid data split configuration: {exc}", failures)
-        train_clips, val_clips, split_path = [], [], None
-    if split_path is not None:
-        print(f"[OK] clip split: {split_path}")
-    for clip in train_clips + val_clips:
-        clip_path = (root / clip).resolve()
-        if clip_path.is_file():
-            print(f"[OK] HOT3D clip: {clip_path}")
-        else:
-            fail(f"Missing HOT3D clip: {clip_path}", failures)
-
-    mano_dir = (root / data_config["mano_model_dir"]).resolve()
-    configured_hands = str(data_config.get("hands", "right")).lower()
-    hands = ("left", "right") if configured_hands in {"both", "all"} else (configured_hands,)
-    for hand in hands:
-        model_path = mano_dir / f"MANO_{hand.upper()}.pkl"
-        if model_path.is_file():
-            print(f"[OK] MANO {hand}: {model_path}")
-        else:
-            fail(f"Missing MANO model: {model_path}", failures)
+    if data_config.get("format", "raw_hot3d") == "derived_webdataset":
+        for field in ("train_manifest", "val_manifest"):
+            if not data_config.get(field):
+                continue
+            manifest_path = (root / data_config[field]).resolve()
+            if manifest_path.is_file():
+                print(f"[OK] derived {field}: {manifest_path}")
+            else:
+                fail(f"Missing derived {field}: {manifest_path}", failures)
+        split_path = (root / data_config["source_split_json"]).resolve() if data_config.get("source_split_json") else None
+        if split_path and split_path.is_file():
+            print(f"[OK] source sequence split: {split_path}")
+        elif split_path:
+            fail(f"Missing source sequence split: {split_path}", failures)
+    else:
+        try:
+            train_clips, val_clips, split_path = resolve_clip_splits(config, root)
+        except (KeyError, ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+            fail(f"Invalid data split configuration: {exc}", failures)
+            train_clips, val_clips, split_path = [], [], None
+        if split_path is not None:
+            print(f"[OK] clip split: {split_path}")
+        for clip in train_clips + val_clips:
+            clip_path = (root / clip).resolve()
+            if clip_path.is_file():
+                print(f"[OK] HOT3D clip: {clip_path}")
+            else:
+                fail(f"Missing HOT3D clip: {clip_path}", failures)
+        mano_dir = (root / data_config["mano_model_dir"]).resolve()
+        configured_hands = str(data_config.get("hands", "right")).lower()
+        hands = ("left", "right") if configured_hands in {"both", "all"} else (configured_hands,)
+        for hand in hands:
+            model_path = mano_dir / f"MANO_{hand.upper()}.pkl"
+            if model_path.is_file():
+                print(f"[OK] MANO {hand}: {model_path}")
+            else:
+                fail(f"Missing MANO model: {model_path}", failures)
 
     try:
         import torch

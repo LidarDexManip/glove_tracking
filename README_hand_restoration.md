@@ -150,3 +150,52 @@ accelerate launch --num_processes 1 train_hand_restorer.py --config configs/hand
 ```
 
 The formal configuration trains at 512x512 for ten dataset epochs with a micro-batch of 4 and two-way gradient accumulation (effective batch 8). At the documented 150 frames per clip and complete right-hand availability, that is 2,259 raster-visible train samples, 283 optimizer steps per epoch, and 2,830 optimizer steps total. Frames whose right MANO mesh is outside the canonical C1 view are explicitly filtered during indexing. Every remaining indexed sample is visited once per epoch and therefore ten times over the run, while diffusion noise and timestep are resampled on every visit. The trainer derives the actual total from the indexed sample count, runs fixed-order, fixed-seed validation exactly once per indexed epoch, and records configuration, split, Git commit, GPU, dependency versions, losses, steps, samples seen, and timing in the experiment directory. Resume remains available with `--resume PATH_TO_CHECKPOINT`.
+
+## Full Quest3 sequence-disjoint pipeline
+
+For the larger run, split by complete `(participant_id, sequence_id)` groups, not by frames. The deterministic seed-7 builder chooses approximately 20% of each participant's sequences for holdout, so every participant with at least two sequences appears on both sides. Participants with only one sequence stay in training and are reported. It aborts if a sequence appears on both sides.
+
+The required official clip metadata and raw tar files are external data and remain ignored by Git. On the training server, place the official Quest3 clip definition JSON at a local path of your choice and the downloaded archives under `data/train_quest3/`, then run:
+
+```bash
+conda activate glove-hot3d
+python build_hot3d_sequence_split.py \
+  --clip-definitions data/train_quest3/clip_definitions.json \
+  --clips-dir data/train_quest3 \
+  --output configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
+  --device Quest3 --holdout-fraction 0.2 --seed 7 --require-existing
+```
+
+Review the printed totals, especially `participants_with_fewer_than_two_sequences`. Then render and undistort the usable right-hand frames once. This preserves the verified `1201-2` right camera, `-90` degree upright C1 warp and shaded MANO raster. It writes canonical grayscale target JPEG, MANO PNG, binary mask PNG and per-sample metadata into resumable tar shards. Frames with absent annotations, missing cameras, an out-of-C1 MANO raster, render errors or masks smaller than 64 pixels are retained in the availability JSONL with an explicit reason, but are not training samples.
+
+```bash
+python preprocess_hot3d_c1_shards.py \
+  --split-json configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
+  --output-dir data/derived/train_quest3_c1 \
+  --clips-per-shard 8 --min-mask-pixels 64 --jpeg-quality 95
+
+python verify_hot3d_derived.py \
+  --dataset-dir data/derived/train_quest3_c1 \
+  --split-json configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
+  --decode-samples 500
+```
+
+Preprocessing is safe to restart: a completed shard plus its two sidecars is validated and skipped; an interrupted `.inprogress` shard is rebuilt. `dataset_summary.json` records usable counts, rejection counts and SHA-256 for every shard. Neither command deletes raw archives. Only archive/delete `data/train_quest3/*.tar` after the verifier passes, the derived dataset is backed up, and a smoke training run has read both train and holdout. Raw data is needed again if camera, raster, JPEG quality or visibility policy changes.
+
+Run the isolated 10-step test, then the 20-epoch job:
+
+```bash
+python check_training_setup.py \
+  --config configs/hand_restoration/train_quest3_sequence_derived_512_smoke.json --require-cuda
+accelerate launch --num_processes 1 --num_machines 1 --dynamo_backend no \
+  train_hand_restorer.py \
+  --config configs/hand_restoration/train_quest3_sequence_derived_512_smoke.json
+
+accelerate launch --num_processes 1 --num_machines 1 --dynamo_backend no \
+  train_hand_restorer.py \
+  --config configs/hand_restoration/train_quest3_sequence_derived_512_batch32.json
+```
+
+The formal default is 512x512, physical batch 32, no gradient accumulation, BF16, learning rate `2e-5`, cosine decay with 1,000 warmup steps and 20 complete dataset epochs. The actual optimizer steps per epoch are `ceil(train_samples / 32)`; the trainer prints this after reading the manifest. Validation is a fixed seed-7 subset of up to 2,048 holdout samples, in fixed order, once per epoch. Checkpoints are saved every two epochs. If batch 32 does not fit, lower only `batch_size` and `validation_batch_size` first; if much more memory is available, benchmark 48 and 64 rather than assuming larger batches improve generalization. Increasing batch size increases throughput but reduces optimizer updates per epoch, so compare by both epochs and optimizer steps.
+
+Resume works with the same command plus `--resume outputs/.../controlnet_stepNNNNNN.pt`. A checkpoint contains ControlNet weights and its global step, not optimizer/scheduler state; the resumed run therefore starts a fresh optimizer/scheduler schedule for the configured number of additional epochs.

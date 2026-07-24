@@ -24,6 +24,7 @@ from hand_restoration.config import load_json_config
 from hand_restoration.data_config import resolve_clip_splits
 from hand_restoration.diffusion import ControlNetHandRestorer, DiffusionConfig
 from hand_restoration.hot3d_dataset import Hot3DSingleFrameDataset
+from hand_restoration.derived_dataset import DerivedHandRestorationDataset
 
 
 def set_seed(seed: int) -> None:
@@ -59,6 +60,43 @@ def make_dataset(config: dict, clip_tars: list[str], include_numpy: bool = False
         require_mano_in_frame=data.get("require_mano_in_frame", False),
         min_visible_mano_vertices=data.get("min_visible_mano_vertices", 1),
     )
+
+
+def make_derived_dataset(config: dict, manifest: Path, include_numpy: bool = False) -> DerivedHandRestorationDataset:
+    data = config["data"]
+    return DerivedHandRestorationDataset(
+        manifest=manifest,
+        output_size=data.get("output_size", 512),
+        grayscale=data.get("grayscale", True),
+        condition=ConditionConfig(**config.get("condition", {})),
+        seed=config.get("seed", 0),
+        include_numpy=include_numpy,
+    )
+
+
+def fixed_subset(dataset, limit: int | None, seed: int):
+    if not limit or limit >= len(dataset):
+        return dataset
+    generator = torch.Generator().manual_seed(seed)
+    indices = torch.randperm(len(dataset), generator=generator)[:limit].sort().values.tolist()
+    return Subset(dataset, indices)
+
+
+def loader_options(train_cfg: dict, workers: int) -> dict:
+    options = {"num_workers": workers, "pin_memory": bool(train_cfg.get("pin_memory", False))}
+    if workers > 0:
+        options["persistent_workers"] = bool(train_cfg.get("persistent_workers", False))
+        options["prefetch_factor"] = int(train_cfg.get("prefetch_factor", 2))
+    return options
+
+
+def resolve_period(value, steps_per_epoch: int) -> int:
+    if value == "epoch":
+        return steps_per_epoch
+    match = re.fullmatch(r"(\d+)epochs?", str(value))
+    if match:
+        return int(match.group(1)) * steps_per_epoch
+    return max(1, int(value))
 
 
 def save_run_metadata(output: Path, config_path: Path, split_path: Path | None, config: dict, train_size: int, val_size: int) -> None:
@@ -130,22 +168,31 @@ def main() -> None:
         mixed_precision=train_cfg.get("mixed_precision", "no"),
         log_with="wandb" if train_cfg.get("use_wandb", False) else None,
     )
-    train_clips, val_clips, split_path = resolve_clip_splits(config, root)
-    train_dataset = make_dataset(config, train_clips)
-    val_dataset = make_dataset(config, val_clips) if val_clips else None
-    limit = train_cfg.get("max_train_samples")
-    if limit:
-        train_dataset = Subset(train_dataset, list(range(min(limit, len(train_dataset)))))
-    val_limit = train_cfg.get("max_validation_samples")
-    if val_dataset is not None and val_limit:
-        val_dataset = Subset(val_dataset, list(range(min(val_limit, len(val_dataset)))))
+    data_format = config["data"].get("format", "raw_hot3d")
+    if data_format == "derived_webdataset":
+        data = config["data"]
+        train_manifest = root / data["train_manifest"]
+        val_manifest = root / data["val_manifest"] if data.get("val_manifest") else None
+        train_dataset = make_derived_dataset(config, train_manifest)
+        val_dataset = make_derived_dataset(config, val_manifest) if val_manifest else None
+        split_path = root / data["source_split_json"] if data.get("source_split_json") else None
+    elif data_format == "raw_hot3d":
+        train_clips, val_clips, split_path = resolve_clip_splits(config, root)
+        train_dataset = make_dataset(config, train_clips)
+        val_dataset = make_dataset(config, val_clips) if val_clips else None
+    else:
+        raise ValueError(f"Unsupported data.format: {data_format}")
+    train_dataset = fixed_subset(train_dataset, train_cfg.get("max_train_samples"), seed)
+    if val_dataset is not None:
+        val_dataset = fixed_subset(val_dataset, train_cfg.get("max_validation_samples"), int(train_cfg.get("validation_seed", seed)))
     batch_size = int(train_cfg.get("batch_size", 1))
     workers = int(train_cfg.get("num_workers", 0))
     train_generator = torch.Generator().manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=train_generator, num_workers=workers)
+    common_loader_options = loader_options(train_cfg, workers)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=train_generator, **common_loader_options)
     val_loader = None
     if val_dataset is not None:
-        val_loader = DataLoader(val_dataset, batch_size=int(train_cfg.get("validation_batch_size", batch_size)), shuffle=False, num_workers=workers)
+        val_loader = DataLoader(val_dataset, batch_size=int(train_cfg.get("validation_batch_size", batch_size)), shuffle=False, **common_loader_options)
 
     micro_batches = math.ceil(len(train_dataset) / (batch_size * accelerator.num_processes))
     optimizer_steps_per_epoch = math.ceil(micro_batches / accelerator.gradient_accumulation_steps)
@@ -198,9 +245,9 @@ def main() -> None:
     ema_decay = float(train_cfg.get("loss_ema_decay", 0.98))
     csv_every = max(1, int(train_cfg.get("csv_log_every", 1)))
     checkpoint_setting = train_cfg.get("checkpoint_every", 250)
-    checkpoint_every = optimizer_steps_per_epoch if checkpoint_setting == "epoch" else max(1, int(checkpoint_setting))
+    checkpoint_every = resolve_period(checkpoint_setting, optimizer_steps_per_epoch)
     validation_setting = train_cfg.get("validation_every", checkpoint_setting)
-    validation_every = optimizer_steps_per_epoch if validation_setting == "epoch" else max(1, int(validation_setting))
+    validation_every = resolve_period(validation_setting, optimizer_steps_per_epoch)
     validation_seed = int(train_cfg.get("validation_seed", seed))
     max_validation_batches = train_cfg.get("max_validation_batches")
     run_start = previous_step_end = time.perf_counter()
