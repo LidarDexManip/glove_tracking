@@ -1,0 +1,46 @@
+{
+  "seed": 7,
+  "data": {
+    "split_json": "configs/hand_restoration/splits/clips_000000_000019_seed7.json",
+    "mano_model_dir": "mano_v1_2/models",
+    "camera_id": "1201-2",
+    "hands": "right",
+    "output_size": 512,
+    "grayscale": true,
+    "frame_start": 0,
+    "frame_stride": 1,
+    "require_mano_in_frame": true,
+    "min_visible_mano_vertices": 1
+  },
+  "condition": {
+    "mode": "masked_replace",
+    "mask_dilation_px": 1,
+    "boundary_corruption_px": 3,
+    "wrist_extension_px": 0,
+    "background_fill": "gray"
+  },
+  "model": {
+    "base_model_id": "runwayml/stable-diffusion-v1-5",
+    "controlnet_model_id": null
+  },
+  "training": {
+    "output_dir": "outputs/hand_restoration/clips000000_000019_continue_epoch16_100",
+    "num_train_epochs": 85,
+    "max_train_steps": null,
+    "batch_size": 4,
+    "validation_batch_size": 4,
+    "gradient_accumulation_steps": 2,
+    "mixed_precision": "fp16",
+    "learning_rate": 0.00001,
+    "lr_scheduler": "constant",
+    "max_grad_norm": 1.0,
+    "num_workers": 2,
+    "log_every": 10,
+    "csv_log_every": 1,
+    "loss_ema_decay": 0.98,
+    "checkpoint_every": 2830,
+    "validation_every": "epoch",
+    "validation_seed": 7,
+    "use_wandb": false
+  }
+}
