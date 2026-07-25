@@ -20,8 +20,17 @@ def normalize_clip_id(value: object) -> str:
 def extract_records(node: object, inherited_id: object | None = None) -> list[dict]:
     records: list[dict] = []
     if isinstance(node, dict):
-        if "participant_id" in node and "sequence_id" in node:
+        if "sequence_id" in node:
             record = dict(node)
+            if "participant_id" not in record:
+                sequence_id = str(record["sequence_id"])
+                participant_id, separator, _ = sequence_id.partition("_")
+                if not separator or not participant_id:
+                    raise ValueError(
+                        "Clip metadata has no participant_id and it cannot be "
+                        f"derived from sequence_id: {sequence_id!r}"
+                    )
+                record["participant_id"] = participant_id
             clip_id = record.get("clip_id", record.get("id", inherited_id))
             if clip_id is None:
                 raise ValueError(f"Clip metadata has no clip id: {record}")
