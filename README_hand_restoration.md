@@ -153,7 +153,7 @@ The formal configuration trains at 512x512 for ten dataset epochs with a micro-b
 
 ## Full Quest3 sequence-disjoint pipeline
 
-For the larger run, split by complete `(participant_id, sequence_id)` groups, not by frames. The deterministic seed-7 builder chooses approximately 20% of each participant's sequences for holdout, so every participant with at least two sequences appears on both sides. Participants with only one sequence stay in training and are reported. It aborts if a sequence appears on both sides.
+For the larger run, split by complete `sequence_id` groups, not by frames. The deterministic seed-7 builder chooses approximately 20% of all sequences for holdout. It does not require participant metadata and aborts if a sequence appears on both sides.
 
 The required official clip metadata and raw tar files are external data and remain ignored by Git. On the training server, place the official Quest3 clip definition JSON at a local path of your choice and the downloaded archives under `data/train_quest3/`, then run:
 
@@ -166,7 +166,7 @@ python build_hot3d_sequence_split.py \
   --device Quest3 --holdout-fraction 0.2 --seed 7 --require-existing
 ```
 
-Review the printed totals, especially `participants_with_fewer_than_two_sequences`. Then render and undistort the usable right-hand frames once. This preserves the verified `1201-2` right camera, `-90` degree upright C1 warp and shaded MANO raster. It writes canonical grayscale target JPEG, MANO PNG, binary mask PNG and per-sample metadata into resumable tar shards. Frames with absent annotations, missing cameras, an out-of-C1 MANO raster, render errors or masks smaller than 64 pixels are retained in the availability JSONL with an explicit reason, but are not training samples.
+Review the printed clip and sequence totals. Then render and undistort the usable right-hand frames once. This preserves the verified `1201-2` right camera, `-90` degree upright C1 warp and shaded MANO raster. It writes canonical grayscale target JPEG, MANO PNG, binary mask PNG and per-sample metadata into resumable tar shards. Frames with absent annotations, missing cameras, an out-of-C1 MANO raster, render errors or masks smaller than 64 pixels are retained in the availability JSONL with an explicit reason, but are not training samples.
 
 ```bash
 python preprocess_hot3d_c1_shards.py \
