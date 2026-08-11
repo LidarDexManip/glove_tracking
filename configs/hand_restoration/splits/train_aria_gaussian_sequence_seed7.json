@@ -1,0 +1,1153 @@
+{
+  "schema_version": 1,
+  "seed": 7,
+  "holdout_fraction": 0.2,
+  "hf_repo": "LIDAR-GT/HUGG_ARIA",
+  "hf_revision": "fa144788084ba3eca30b753b50b26e31001c11f2",
+  "train": [
+    "P0001_10a27bf7",
+    "P0001_15c4300c",
+    "P0001_23fa0ee8",
+    "P0001_550ea2ac",
+    "P0001_8d136980",
+    "P0001_95eabc0a",
+    "P0001_9b6feab7",
+    "P0001_9c030609",
+    "P0001_a68492d5",
+    "P0001_a9d6c83d",
+    "P0001_b2bcbe28",
+    "P0001_f6cc0cc8",
+    "P0001_f71fc9b1",
+    "P0002_2ea9af5b",
+    "P0002_59a84a3a",
+    "P0002_65085bfc",
+    "P0002_c68438ce",
+    "P0003_5766eae8",
+    "P0003_743d3087",
+    "P0003_c701bd11",
+    "P0003_cbd17f20",
+    "P0003_e3a74169",
+    "P0003_f4730606",
+    "P0009_0e02bf39",
+    "P0009_247b5403",
+    "P0009_24af5475",
+    "P0009_37e30628",
+    "P0009_5bb7cc2a",
+    "P0009_5f2583e0",
+    "P0009_88a58b3b",
+    "P0009_8c0caf6c",
+    "P0009_8c95667c",
+    "P0009_927973d7",
+    "P0009_9e03121a",
+    "P0009_b1e71d7f",
+    "P0009_b7d8c222",
+    "P0009_cf323827",
+    "P0009_e27ad19f",
+    "P0009_e71e2f24",
+    "P0010_0ecbf39f",
+    "P0010_160e551c",
+    "P0010_41c4c626",
+    "P0010_6d15aa57",
+    "P0010_8ff3e5c4",
+    "P0010_924e574e",
+    "P0010_99385ad8",
+    "P0010_b152143e",
+    "P0010_e481fd15",
+    "P0010_fd1891a8",
+    "P0011_0c2d00ed",
+    "P0011_11475e24",
+    "P0011_2255f410",
+    "P0011_30a5b61d",
+    "P0011_451a7734",
+    "P0011_4dcdcfec",
+    "P0011_72efb935",
+    "P0011_76ea6d47",
+    "P0011_7a8886e7",
+    "P0011_a497658f",
+    "P0011_ad5f7dee",
+    "P0011_b0c895c1",
+    "P0011_cd22f5e0",
+    "P0011_cee8fe4f",
+    "P0011_d0f907a0",
+    "P0011_dbf1ebb7",
+    "P0011_ff7cfc3a",
+    "P0012_0323d770",
+    "P0012_0a21e4c2",
+    "P0012_130a66e1",
+    "P0012_1c45bbd9",
+    "P0012_476bae57",
+    "P0012_6e4f7815",
+    "P0012_73e66984",
+    "P0012_915e71c6",
+    "P0012_af3dab9a",
+    "P0012_b8fc4c1b",
+    "P0012_c06d939b",
+    "P0012_c4353c31",
+    "P0012_ca1f6626",
+    "P0012_d6272ce1",
+    "P0012_db543fe8",
+    "P0012_e846d3cc",
+    "P0012_e97d31b6",
+    "P0012_f1a33781",
+    "P0014_1fdca00e",
+    "P0014_24cb3bf0",
+    "P0014_65c6a968",
+    "P0014_6db96fd0",
+    "P0014_8254f925",
+    "P0014_9a25ec6a",
+    "P0014_9b7a0725",
+    "P0014_e40eec5d",
+    "P0014_f7ba43e0",
+    "P0015_179e1b84",
+    "P0015_1eb4f17f",
+    "P0015_367cc58d",
+    "P0015_3a9bb2ae",
+    "P0015_3f46732d",
+    "P0015_42b8b389",
+    "P0015_4e5d1c14",
+    "P0015_53358a64",
+    "P0015_745920f0",
+    "P0015_7e95628d",
+    "P0015_b0c5102b",
+    "P0015_c3e1f590",
+    "P0015_cc5dfd13",
+    "P0015_cc739faa",
+    "P0015_dbe00981",
+    "P0015_e7458eb3"
+  ],
+  "holdout": [
+    "P0001_4bf4e21a",
+    "P0001_624f2ba9",
+    "P0001_83b755aa",
+    "P0002_016222d1",
+    "P0003_1fa0bb65",
+    "P0003_ebdc6ff7",
+    "P0009_02511c2f",
+    "P0009_1b21bb01",
+    "P0009_911a4ba5",
+    "P0009_ea91844d",
+    "P0010_1573a837",
+    "P0010_1c9fe708",
+    "P0010_573b2de6",
+    "P0011_47878e48",
+    "P0011_7c7e8d86",
+    "P0011_ccc678c7",
+    "P0011_e5cb6a80",
+    "P0012_119de519",
+    "P0012_44c5f677",
+    "P0012_d85e10f6",
+    "P0012_f7e3880b",
+    "P0014_0de48e2c",
+    "P0014_84ea2dcc",
+    "P0015_3c7f5241",
+    "P0015_60573a3b",
+    "P0015_7fc6548d",
+    "P0015_e3f96b3f"
+  ],
+  "sequence_metadata": {
+    "P0001_10a27bf7": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_10a27bf7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_10a27bf7/hand_gaussians.npz"
+    },
+    "P0001_15c4300c": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_15c4300c",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_15c4300c/hand_gaussians.npz"
+    },
+    "P0001_23fa0ee8": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_23fa0ee8",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_23fa0ee8/hand_gaussians.npz"
+    },
+    "P0001_4bf4e21a": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_4bf4e21a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_4bf4e21a/hand_gaussians.npz"
+    },
+    "P0001_550ea2ac": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_550ea2ac",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_550ea2ac/hand_gaussians.npz"
+    },
+    "P0001_624f2ba9": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_624f2ba9",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_624f2ba9/hand_gaussians.npz"
+    },
+    "P0001_83b755aa": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_83b755aa",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_83b755aa/hand_gaussians.npz"
+    },
+    "P0001_8d136980": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_8d136980",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_8d136980/hand_gaussians.npz"
+    },
+    "P0001_95eabc0a": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_95eabc0a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_95eabc0a/hand_gaussians.npz"
+    },
+    "P0001_9b6feab7": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_9b6feab7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_9b6feab7/hand_gaussians.npz"
+    },
+    "P0001_9c030609": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_9c030609",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_9c030609/hand_gaussians.npz"
+    },
+    "P0001_a68492d5": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_a68492d5",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_a68492d5/hand_gaussians.npz"
+    },
+    "P0001_a9d6c83d": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_a9d6c83d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_a9d6c83d/hand_gaussians.npz"
+    },
+    "P0001_b2bcbe28": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_b2bcbe28",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_b2bcbe28/hand_gaussians.npz"
+    },
+    "P0001_f6cc0cc8": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_f6cc0cc8",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_f6cc0cc8/hand_gaussians.npz"
+    },
+    "P0001_f71fc9b1": {
+      "participant_id": "P0001",
+      "sequence_id": "P0001_f71fc9b1",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0001_f71fc9b1/hand_gaussians.npz"
+    },
+    "P0002_016222d1": {
+      "participant_id": "P0002",
+      "sequence_id": "P0002_016222d1",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0002_016222d1/hand_gaussians.npz"
+    },
+    "P0002_2ea9af5b": {
+      "participant_id": "P0002",
+      "sequence_id": "P0002_2ea9af5b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0002_2ea9af5b/hand_gaussians.npz"
+    },
+    "P0002_59a84a3a": {
+      "participant_id": "P0002",
+      "sequence_id": "P0002_59a84a3a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0002_59a84a3a/hand_gaussians.npz"
+    },
+    "P0002_65085bfc": {
+      "participant_id": "P0002",
+      "sequence_id": "P0002_65085bfc",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0002_65085bfc/hand_gaussians.npz"
+    },
+    "P0002_c68438ce": {
+      "participant_id": "P0002",
+      "sequence_id": "P0002_c68438ce",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0002_c68438ce/hand_gaussians.npz"
+    },
+    "P0003_1fa0bb65": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_1fa0bb65",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_1fa0bb65/hand_gaussians.npz"
+    },
+    "P0003_5766eae8": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_5766eae8",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_5766eae8/hand_gaussians.npz"
+    },
+    "P0003_743d3087": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_743d3087",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_743d3087/hand_gaussians.npz"
+    },
+    "P0003_c701bd11": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_c701bd11",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_c701bd11/hand_gaussians.npz"
+    },
+    "P0003_cbd17f20": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_cbd17f20",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_cbd17f20/hand_gaussians.npz"
+    },
+    "P0003_e3a74169": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_e3a74169",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_e3a74169/hand_gaussians.npz"
+    },
+    "P0003_ebdc6ff7": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_ebdc6ff7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_ebdc6ff7/hand_gaussians.npz"
+    },
+    "P0003_f4730606": {
+      "participant_id": "P0003",
+      "sequence_id": "P0003_f4730606",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0003_f4730606/hand_gaussians.npz"
+    },
+    "P0009_02511c2f": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_02511c2f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_02511c2f/hand_gaussians.npz"
+    },
+    "P0009_0e02bf39": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_0e02bf39",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_0e02bf39/hand_gaussians.npz"
+    },
+    "P0009_1b21bb01": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_1b21bb01",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_1b21bb01/hand_gaussians.npz"
+    },
+    "P0009_247b5403": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_247b5403",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_247b5403/hand_gaussians.npz"
+    },
+    "P0009_24af5475": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_24af5475",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_24af5475/hand_gaussians.npz"
+    },
+    "P0009_37e30628": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_37e30628",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_37e30628/hand_gaussians.npz"
+    },
+    "P0009_5bb7cc2a": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_5bb7cc2a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_5bb7cc2a/hand_gaussians.npz"
+    },
+    "P0009_5f2583e0": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_5f2583e0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_5f2583e0/hand_gaussians.npz"
+    },
+    "P0009_88a58b3b": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_88a58b3b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_88a58b3b/hand_gaussians.npz"
+    },
+    "P0009_8c0caf6c": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_8c0caf6c",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_8c0caf6c/hand_gaussians.npz"
+    },
+    "P0009_8c95667c": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_8c95667c",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_8c95667c/hand_gaussians.npz"
+    },
+    "P0009_911a4ba5": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_911a4ba5",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_911a4ba5/hand_gaussians.npz"
+    },
+    "P0009_927973d7": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_927973d7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_927973d7/hand_gaussians.npz"
+    },
+    "P0009_9e03121a": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_9e03121a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_9e03121a/hand_gaussians.npz"
+    },
+    "P0009_b1e71d7f": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_b1e71d7f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_b1e71d7f/hand_gaussians.npz"
+    },
+    "P0009_b7d8c222": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_b7d8c222",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_b7d8c222/hand_gaussians.npz"
+    },
+    "P0009_cf323827": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_cf323827",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_cf323827/hand_gaussians.npz"
+    },
+    "P0009_e27ad19f": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_e27ad19f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_e27ad19f/hand_gaussians.npz"
+    },
+    "P0009_e71e2f24": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_e71e2f24",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_e71e2f24/hand_gaussians.npz"
+    },
+    "P0009_ea91844d": {
+      "participant_id": "P0009",
+      "sequence_id": "P0009_ea91844d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0009_ea91844d/hand_gaussians.npz"
+    },
+    "P0010_0ecbf39f": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_0ecbf39f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_0ecbf39f/hand_gaussians.npz"
+    },
+    "P0010_1573a837": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_1573a837",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_1573a837/hand_gaussians.npz"
+    },
+    "P0010_160e551c": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_160e551c",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_160e551c/hand_gaussians.npz"
+    },
+    "P0010_1c9fe708": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_1c9fe708",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_1c9fe708/hand_gaussians.npz"
+    },
+    "P0010_41c4c626": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_41c4c626",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_41c4c626/hand_gaussians.npz"
+    },
+    "P0010_573b2de6": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_573b2de6",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_573b2de6/hand_gaussians.npz"
+    },
+    "P0010_6d15aa57": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_6d15aa57",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_6d15aa57/hand_gaussians.npz"
+    },
+    "P0010_8ff3e5c4": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_8ff3e5c4",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_8ff3e5c4/hand_gaussians.npz"
+    },
+    "P0010_924e574e": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_924e574e",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_924e574e/hand_gaussians.npz"
+    },
+    "P0010_99385ad8": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_99385ad8",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_99385ad8/hand_gaussians.npz"
+    },
+    "P0010_b152143e": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_b152143e",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_b152143e/hand_gaussians.npz"
+    },
+    "P0010_e481fd15": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_e481fd15",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_e481fd15/hand_gaussians.npz"
+    },
+    "P0010_fd1891a8": {
+      "participant_id": "P0010",
+      "sequence_id": "P0010_fd1891a8",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0010_fd1891a8/hand_gaussians.npz"
+    },
+    "P0011_0c2d00ed": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_0c2d00ed",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_0c2d00ed/hand_gaussians.npz"
+    },
+    "P0011_11475e24": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_11475e24",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_11475e24/hand_gaussians.npz"
+    },
+    "P0011_2255f410": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_2255f410",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_2255f410/hand_gaussians.npz"
+    },
+    "P0011_30a5b61d": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_30a5b61d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_30a5b61d/hand_gaussians.npz"
+    },
+    "P0011_451a7734": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_451a7734",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_451a7734/hand_gaussians.npz"
+    },
+    "P0011_47878e48": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_47878e48",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_47878e48/hand_gaussians.npz"
+    },
+    "P0011_4dcdcfec": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_4dcdcfec",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_4dcdcfec/hand_gaussians.npz"
+    },
+    "P0011_72efb935": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_72efb935",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_72efb935/hand_gaussians.npz"
+    },
+    "P0011_76ea6d47": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_76ea6d47",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_76ea6d47/hand_gaussians.npz"
+    },
+    "P0011_7a8886e7": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_7a8886e7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_7a8886e7/hand_gaussians.npz"
+    },
+    "P0011_7c7e8d86": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_7c7e8d86",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_7c7e8d86/hand_gaussians.npz"
+    },
+    "P0011_a497658f": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_a497658f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_a497658f/hand_gaussians.npz"
+    },
+    "P0011_ad5f7dee": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_ad5f7dee",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_ad5f7dee/hand_gaussians.npz"
+    },
+    "P0011_b0c895c1": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_b0c895c1",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_b0c895c1/hand_gaussians.npz"
+    },
+    "P0011_ccc678c7": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_ccc678c7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_ccc678c7/hand_gaussians.npz"
+    },
+    "P0011_cd22f5e0": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_cd22f5e0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_cd22f5e0/hand_gaussians.npz"
+    },
+    "P0011_cee8fe4f": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_cee8fe4f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_cee8fe4f/hand_gaussians.npz"
+    },
+    "P0011_d0f907a0": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_d0f907a0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_d0f907a0/hand_gaussians.npz"
+    },
+    "P0011_dbf1ebb7": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_dbf1ebb7",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_dbf1ebb7/hand_gaussians.npz"
+    },
+    "P0011_e5cb6a80": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_e5cb6a80",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_e5cb6a80/hand_gaussians.npz"
+    },
+    "P0011_ff7cfc3a": {
+      "participant_id": "P0011",
+      "sequence_id": "P0011_ff7cfc3a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0011_ff7cfc3a/hand_gaussians.npz"
+    },
+    "P0012_0323d770": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_0323d770",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_0323d770/hand_gaussians.npz"
+    },
+    "P0012_0a21e4c2": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_0a21e4c2",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_0a21e4c2/hand_gaussians.npz"
+    },
+    "P0012_119de519": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_119de519",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_119de519/hand_gaussians.npz"
+    },
+    "P0012_130a66e1": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_130a66e1",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_130a66e1/hand_gaussians.npz"
+    },
+    "P0012_1c45bbd9": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_1c45bbd9",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_1c45bbd9/hand_gaussians.npz"
+    },
+    "P0012_44c5f677": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_44c5f677",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_44c5f677/hand_gaussians.npz"
+    },
+    "P0012_476bae57": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_476bae57",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_476bae57/hand_gaussians.npz"
+    },
+    "P0012_6e4f7815": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_6e4f7815",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_6e4f7815/hand_gaussians.npz"
+    },
+    "P0012_73e66984": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_73e66984",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_73e66984/hand_gaussians.npz"
+    },
+    "P0012_915e71c6": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_915e71c6",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_915e71c6/hand_gaussians.npz"
+    },
+    "P0012_af3dab9a": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_af3dab9a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_af3dab9a/hand_gaussians.npz"
+    },
+    "P0012_b8fc4c1b": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_b8fc4c1b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_b8fc4c1b/hand_gaussians.npz"
+    },
+    "P0012_c06d939b": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_c06d939b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_c06d939b/hand_gaussians.npz"
+    },
+    "P0012_c4353c31": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_c4353c31",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_c4353c31/hand_gaussians.npz"
+    },
+    "P0012_ca1f6626": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_ca1f6626",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_ca1f6626/hand_gaussians.npz"
+    },
+    "P0012_d6272ce1": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_d6272ce1",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_d6272ce1/hand_gaussians.npz"
+    },
+    "P0012_d85e10f6": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_d85e10f6",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_d85e10f6/hand_gaussians.npz"
+    },
+    "P0012_db543fe8": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_db543fe8",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_db543fe8/hand_gaussians.npz"
+    },
+    "P0012_e846d3cc": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_e846d3cc",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_e846d3cc/hand_gaussians.npz"
+    },
+    "P0012_e97d31b6": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_e97d31b6",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_e97d31b6/hand_gaussians.npz"
+    },
+    "P0012_f1a33781": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_f1a33781",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_f1a33781/hand_gaussians.npz"
+    },
+    "P0012_f7e3880b": {
+      "participant_id": "P0012",
+      "sequence_id": "P0012_f7e3880b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0012_f7e3880b/hand_gaussians.npz"
+    },
+    "P0014_0de48e2c": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_0de48e2c",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_0de48e2c/hand_gaussians.npz"
+    },
+    "P0014_1fdca00e": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_1fdca00e",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_1fdca00e/hand_gaussians.npz"
+    },
+    "P0014_24cb3bf0": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_24cb3bf0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_24cb3bf0/hand_gaussians.npz"
+    },
+    "P0014_65c6a968": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_65c6a968",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_65c6a968/hand_gaussians.npz"
+    },
+    "P0014_6db96fd0": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_6db96fd0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_6db96fd0/hand_gaussians.npz"
+    },
+    "P0014_8254f925": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_8254f925",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_8254f925/hand_gaussians.npz"
+    },
+    "P0014_84ea2dcc": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_84ea2dcc",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_84ea2dcc/hand_gaussians.npz"
+    },
+    "P0014_9a25ec6a": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_9a25ec6a",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_9a25ec6a/hand_gaussians.npz"
+    },
+    "P0014_9b7a0725": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_9b7a0725",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_9b7a0725/hand_gaussians.npz"
+    },
+    "P0014_e40eec5d": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_e40eec5d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_e40eec5d/hand_gaussians.npz"
+    },
+    "P0014_f7ba43e0": {
+      "participant_id": "P0014",
+      "sequence_id": "P0014_f7ba43e0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0014_f7ba43e0/hand_gaussians.npz"
+    },
+    "P0015_179e1b84": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_179e1b84",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_179e1b84/hand_gaussians.npz"
+    },
+    "P0015_1eb4f17f": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_1eb4f17f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_1eb4f17f/hand_gaussians.npz"
+    },
+    "P0015_367cc58d": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_367cc58d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_367cc58d/hand_gaussians.npz"
+    },
+    "P0015_3a9bb2ae": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_3a9bb2ae",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_3a9bb2ae/hand_gaussians.npz"
+    },
+    "P0015_3c7f5241": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_3c7f5241",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_3c7f5241/hand_gaussians.npz"
+    },
+    "P0015_3f46732d": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_3f46732d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_3f46732d/hand_gaussians.npz"
+    },
+    "P0015_42b8b389": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_42b8b389",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_42b8b389/hand_gaussians.npz"
+    },
+    "P0015_4e5d1c14": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_4e5d1c14",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_4e5d1c14/hand_gaussians.npz"
+    },
+    "P0015_53358a64": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_53358a64",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_53358a64/hand_gaussians.npz"
+    },
+    "P0015_60573a3b": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_60573a3b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_60573a3b/hand_gaussians.npz"
+    },
+    "P0015_745920f0": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_745920f0",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_745920f0/hand_gaussians.npz"
+    },
+    "P0015_7e95628d": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_7e95628d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_7e95628d/hand_gaussians.npz"
+    },
+    "P0015_7fc6548d": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_7fc6548d",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_7fc6548d/hand_gaussians.npz"
+    },
+    "P0015_b0c5102b": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_b0c5102b",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_b0c5102b/hand_gaussians.npz"
+    },
+    "P0015_c3e1f590": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_c3e1f590",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_c3e1f590/hand_gaussians.npz"
+    },
+    "P0015_cc5dfd13": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_cc5dfd13",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_cc5dfd13/hand_gaussians.npz"
+    },
+    "P0015_cc739faa": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_cc739faa",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_cc739faa/hand_gaussians.npz"
+    },
+    "P0015_dbe00981": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_dbe00981",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_dbe00981/hand_gaussians.npz"
+    },
+    "P0015_e3f96b3f": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_e3f96b3f",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_e3f96b3f/hand_gaussians.npz"
+    },
+    "P0015_e7458eb3": {
+      "participant_id": "P0015",
+      "sequence_id": "P0015_e7458eb3",
+      "device": "Aria",
+      "camera_id": "214-1",
+      "gaussian": "Gaussians/P0015_e7458eb3/hand_gaussians.npz"
+    }
+  },
+  "statistics": {
+    "sequences": 136,
+    "train": 109,
+    "holdout": 27,
+    "participants": {
+      "P0001": {
+        "total": 16,
+        "train": 13,
+        "holdout": 3
+      },
+      "P0002": {
+        "total": 5,
+        "train": 4,
+        "holdout": 1
+      },
+      "P0003": {
+        "total": 8,
+        "train": 6,
+        "holdout": 2
+      },
+      "P0009": {
+        "total": 20,
+        "train": 16,
+        "holdout": 4
+      },
+      "P0010": {
+        "total": 13,
+        "train": 10,
+        "holdout": 3
+      },
+      "P0011": {
+        "total": 21,
+        "train": 17,
+        "holdout": 4
+      },
+      "P0012": {
+        "total": 22,
+        "train": 18,
+        "holdout": 4
+      },
+      "P0014": {
+        "total": 11,
+        "train": 9,
+        "holdout": 2
+      },
+      "P0015": {
+        "total": 20,
+        "train": 16,
+        "holdout": 4
+      }
+    }
+  }
+}
