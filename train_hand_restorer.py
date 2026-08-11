@@ -71,6 +71,7 @@ def make_derived_dataset(config: dict, manifest: Path, include_numpy: bool = Fal
         condition=ConditionConfig(**config.get("condition", {})),
         seed=config.get("seed", 0),
         include_numpy=include_numpy,
+        mask_member=data.get("mask_member", "mask.png"),
     )
 
 

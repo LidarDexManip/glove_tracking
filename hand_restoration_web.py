@@ -182,17 +182,23 @@ class InferenceApp:
 
 
 def build_ui(app: InferenceApp):
+    # Import the compatibility namespace before Gradio/FastAPI builds routes;
+    # lazy concurrent imports can trip Python 3.10's import lock in Pydantic 2.
+    import pydantic.v1  # noqa: F401
     import gradio as gr
 
     choices = app.checkpoint_choices()
     if not choices:
         raise FileNotFoundError(f"No checkpoints found under {app.checkpoint_dir}")
+    gaussian_input = app.config.get("condition", {}).get("mode") == "overlay"
+    page_title = "Aria RGB Gaussian Hand Restoration" if gaussian_input else "HOT3D Hand Restoration"
+    hand_input_label = "Gaussian hand" if gaussian_input else "Shaded MANO"
 
-    with gr.Blocks(title="HOT3D Hand Restoration") as demo:
+    with gr.Blocks(title=page_title) as demo:
         gr.HTML(
-            """
+            f"""
             <div class="hero">
-              <h1>HOT3D Hand Restoration Lab</h1>
+              <h1>{page_title}</h1>
               <p>Inspect derived holdout samples and run deterministic ControlNet inference
               against server-side checkpoints. The model and data never leave the GPU server.</p>
             </div>
@@ -224,7 +230,7 @@ def build_ui(app: InferenceApp):
                 with gr.Row():
                     target = gr.Image(label="Target", type="numpy")
                     condition = gr.Image(label="Condition", type="numpy")
-                    mano = gr.Image(label="Shaded MANO", type="numpy")
+                    mano = gr.Image(label=hand_input_label, type="numpy")
                 with gr.Row():
                     mano_mask = gr.Image(label="MANO mask", type="numpy")
                     edit_mask = gr.Image(label="Edit mask", type="numpy")
