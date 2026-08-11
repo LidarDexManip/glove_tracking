@@ -11,7 +11,7 @@ from hand_tracking_toolkit.dataset import warp_image
 from hot3d.hot3d.clips import clip_util
 
 # Example:
-# C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe export_hot3d_clip_undistorted.py --stream-id both
+# C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe -m scripts.data.export_hot3d_clip_undistorted --stream-id both
 
 
 CANONICAL_CAMERA = {

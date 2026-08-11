@@ -30,6 +30,7 @@ class DerivedHandRestorationDataset(Dataset):
         condition: ConditionConfig | None = None,
         seed: int = 0,
         include_numpy: bool = False,
+        mask_member: str = "mask.png",
     ) -> None:
         self.manifest_path = Path(manifest)
         if not self.manifest_path.is_file():
@@ -40,9 +41,10 @@ class DerivedHandRestorationDataset(Dataset):
             raise RuntimeError(f"Derived manifest has no samples: {self.manifest_path}")
         self.output_size = int(output_size)
         self.grayscale = bool(grayscale)
-        if not self.grayscale:
-            raise ValueError("Derived dataset currently stores the verified grayscale C1 path only.")
         self.include_numpy = include_numpy
+        if mask_member not in {"mask.png", "visible_mask.png"}:
+            raise ValueError("mask_member must be mask.png or visible_mask.png")
+        self.mask_member = mask_member
         self.condition_builder = ConditionBuilder(condition or ConditionConfig(), seed=seed)
         self._tar_handles: dict[Path, tarfile.TarFile] = {}
 
@@ -74,14 +76,25 @@ class DerivedHandRestorationDataset(Dataset):
         if not shard.is_absolute():
             shard = self.root / shard
         key = record["key"]
-        target = _decode_image(self._read(shard, f"{key}.target.jpg"), cv2.IMREAD_GRAYSCALE)
-        mano = _decode_image(self._read(shard, f"{key}.mano.png"), cv2.IMREAD_GRAYSCALE)
-        mask = _decode_image(self._read(shard, f"{key}.mask.png"), cv2.IMREAD_GRAYSCALE)
-        target = cv2.resize(target, (self.output_size, self.output_size), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
-        mano = cv2.resize(mano, (self.output_size, self.output_size), interpolation=cv2.INTER_LINEAR).astype(np.float32) / 255.0
+        image_flag = cv2.IMREAD_GRAYSCALE if self.grayscale else cv2.IMREAD_COLOR
+        target = _decode_image(self._read(shard, f"{key}.target.jpg"), image_flag)
+        mano = _decode_image(self._read(shard, f"{key}.mano.png"), image_flag)
+        mask = _decode_image(self._read(shard, f"{key}.{self.mask_member}"), cv2.IMREAD_GRAYSCALE)
+        geometry_mask = (mask if self.mask_member == "mask.png" else
+                         _decode_image(self._read(shard, f"{key}.mask.png"), cv2.IMREAD_GRAYSCALE))
+        target = cv2.resize(target, (self.output_size, self.output_size), interpolation=cv2.INTER_AREA)
+        mano = cv2.resize(mano, (self.output_size, self.output_size), interpolation=cv2.INTER_LINEAR)
         mask = cv2.resize(mask, (self.output_size, self.output_size), interpolation=cv2.INTER_NEAREST).astype(np.float32) / 255.0
-        target_rgb = np.repeat(target[..., None], 3, axis=2)
-        mano_rgb = np.repeat(mano[..., None], 3, axis=2)
+        geometry_mask = cv2.resize(geometry_mask, (self.output_size, self.output_size), interpolation=cv2.INTER_NEAREST).astype(np.float32) / 255.0
+        if self.grayscale:
+            target_rgb = np.repeat(target[..., None], 3, axis=2)
+            mano_rgb = np.repeat(mano[..., None], 3, axis=2)
+        else:
+            # OpenCV decodes color images as BGR; all public dataset tensors use RGB.
+            target_rgb = cv2.cvtColor(target, cv2.COLOR_BGR2RGB)
+            mano_rgb = cv2.cvtColor(mano, cv2.COLOR_BGR2RGB)
+        target_rgb = target_rgb.astype(np.float32) / 255.0
+        mano_rgb = mano_rgb.astype(np.float32) / 255.0
         condition_rgb, edit_mask = self.condition_builder(target_rgb, mano_rgb, mask)
         result = {
             "target_rgb": torch.from_numpy(target_rgb.transpose(2, 0, 1) * 2.0 - 1.0),
@@ -90,7 +103,7 @@ class DerivedHandRestorationDataset(Dataset):
             "condition_rgb": torch.from_numpy(condition_rgb.transpose(2, 0, 1) * 2.0 - 1.0),
             "edit_mask": torch.from_numpy(edit_mask[None].astype(np.float32)),
             "metadata": {
-                "sequence_id": record["clip_id"],
+                "sequence_id": record.get("source_sequence_id", record["clip_id"]),
                 "frame_id": record["frame_id"],
                 "camera_id": record["camera_id"],
                 "handedness": record["handedness"],
@@ -100,5 +113,7 @@ class DerivedHandRestorationDataset(Dataset):
             },
         }
         if self.include_numpy:
-            result.update({"target_rgb_np": target_rgb, "mano_rgb_np": mano_rgb, "mano_mask_np": mask, "condition_rgb_np": condition_rgb, "edit_mask_np": edit_mask})
+            result.update({"target_rgb_np": target_rgb, "mano_rgb_np": mano_rgb, "mano_mask_np": mask,
+                           "geometry_mask_np": geometry_mask, "condition_rgb_np": condition_rgb,
+                           "edit_mask_np": edit_mask})
         return result

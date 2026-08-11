@@ -7,7 +7,7 @@ manifests and discovers `controlnet_step*.pt` plus `controlnet_final.pt`.
 ## Install
 
 ```bash
-cd /root/glove_tracking
+cd /home/szeng87/glove_tracking
 conda run -n glove-hot3d python -m pip install -r requirements.web-ui.txt
 ```
 
@@ -22,7 +22,7 @@ export HAND_UI_PASSWORD='REPLACE_WITH_A_LONG_RANDOM_PASSWORD'
 systemd-run \
   --unit=hand-inference-web \
   --description="HOT3D browser inference" \
-  --property=WorkingDirectory=/root/glove_tracking \
+  --property=WorkingDirectory=/home/szeng87/glove_tracking \
   --setenv=HAND_UI_USERNAME="$HAND_UI_USERNAME" \
   --setenv=HAND_UI_PASSWORD="$HAND_UI_PASSWORD" \
   --collect \
@@ -31,16 +31,16 @@ systemd-run \
       HAND_UI_USERNAME="$HAND_UI_USERNAME" \
       HAND_UI_PASSWORD="$HAND_UI_PASSWORD" \
       CUDA_VISIBLE_DEVICES=0 \
-      /root/miniconda3/bin/conda run --no-capture-output -n glove-hot3d \
+      /home/szeng87/miniconda3/bin/conda run --no-capture-output -n glove-hot3d \
       python hand_restoration_web.py --share \
-      >> /root/glove_tracking/hand-inference-web.log 2>&1
+      >> /home/szeng87/glove_tracking/hand-inference-web.log 2>&1
   '
 ```
 
 Read the generated URL:
 
 ```bash
-tail -f /root/glove_tracking/hand-inference-web.log
+tail -f /home/szeng87/glove_tracking/hand-inference-web.log
 ```
 
 If the environment variables are not preserved by the platform's
@@ -65,7 +65,7 @@ whenever the UI is remotely reachable.
 ```bash
 systemctl status hand-inference-web
 systemctl stop hand-inference-web
-tail -f /root/glove_tracking/hand-inference-web.log
+tail -f /home/szeng87/glove_tracking/hand-inference-web.log
 ```
 
 Generated experiments are saved under:

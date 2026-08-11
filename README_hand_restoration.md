@@ -10,7 +10,7 @@ AnimateDiff or video training.
 ## Existing code reused
 
 - `hot3d/hot3d/clips/clip_util.py`: clip tar images, annotations, and cameras.
-- `export_hot3d_clip_undistorted.py`: established C1 calibration and the
+- `scripts/data/export_hot3d_clip_undistorted.py`: established C1 calibration and the
   required `-90` degree upright target-camera roll.
 - `hot3d_glove_torch_utils.py`: SMPL-X MANO loading and the HOT3D left-hand
   shape-direction fix.
@@ -47,20 +47,20 @@ first train/inference invocation downloads the configurable public base model
 Generate input/condition debug grids without Diffusers:
 
 ```powershell
-C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe debug_hand_restoration_samples.py --config configs/hand_restoration/debug_samples.json
+C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe -m scripts.evaluation.debug_hand_restoration_samples --config configs/hand_restoration/debug_samples.json
 ```
 
 Run the corresponding deterministic preprocessing smoke test:
 
 ```powershell
-C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe smoke_test_hand_restoration.py
+C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe smoke_test_hand_restoration.py
 ```
 
 After installing dependencies and allowing the public SD weights to download,
 also check one real diffusion forward pass and ControlNet checkpoint reload:
 
 ```powershell
-C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe smoke_test_hand_restoration.py --diffusion
+C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe smoke_test_hand_restoration.py --diffusion
 ```
 
 Tiny local-window overfit run (frames 10-20 of clip 000000, GPU strongly recommended):
@@ -72,13 +72,13 @@ accelerate launch train_hand_restorer.py --config configs/hand_restoration/tiny_
 Run an inference using a saved ControlNet checkpoint:
 
 ```powershell
-C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe infer_hand_restorer.py --config configs/hand_restoration/inference.json --checkpoint outputs/hand_restoration/tiny_overfit/controlnet_final.pt
+C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe infer_hand_restorer.py --config configs/hand_restoration/inference.json --checkpoint outputs/hand_restoration/tiny_overfit/controlnet_final.pt
 ```
 
 Compare one exact frame across every checkpoint in a training output directory:
 
 ```powershell
-C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe compare_hand_restoration_checkpoints.py
+C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe -m scripts.evaluation.compare_hand_restoration_checkpoints
 ```
 
 The GUI uses the same seed and sampling settings for every checkpoint. It saves
@@ -90,7 +90,7 @@ Preview the public SD 1.5 prior before any HOT3D training (useful as a
 baseline, but it is not expected to follow the MANO condition reliably):
 
 ```powershell
-C:\Users\Shaoyu\miniforge3\envs\glove-hot3d\python.exe infer_hand_restorer.py --config configs/hand_restoration/inference.json --pretrained
+C:\Users\szeng87\miniforge3\envs\glove-hot3d\python.exe infer_hand_restorer.py --config configs/hand_restoration/inference.json --pretrained
 ```
 
 ## Condition modes
@@ -130,7 +130,7 @@ Place the original, unextracted archives at `data/train_quest3/clip-NNNNNN.tar`.
 
 ```bash
 conda activate glove-hot3d
-python prepare_hot3d_clips.py --download
+python -m scripts.data.prepare_hot3d_clips --download
 ```
 
 The validator opens every tar, checks the right-camera image and camera metadata, counts total frames, right-MANO frames, and final samples, and writes those statistics into `configs/hand_restoration/splits/clips_000000_000019_seed7.json`. Missing or annotation-poor clips are reported explicitly. Data, download manifests, MANO assets, caches, outputs, and checkpoints remain ignored by Git.
@@ -159,7 +159,7 @@ The required official clip metadata and raw tar files are external data and rema
 
 ```bash
 conda activate glove-hot3d
-python build_hot3d_sequence_split.py \
+python -m scripts.data.build_hot3d_sequence_split \
   --clip-definitions data/train_quest3/clip_definitions.json \
   --clips-dir data/train_quest3 \
   --output configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
@@ -169,12 +169,12 @@ python build_hot3d_sequence_split.py \
 Review the printed totals, especially `participants_with_fewer_than_two_sequences`. Then render and undistort the usable right-hand frames once. This preserves the verified `1201-2` right camera, `-90` degree upright C1 warp and shaded MANO raster. It writes canonical grayscale target JPEG, MANO PNG, binary mask PNG and per-sample metadata into resumable tar shards. Frames with absent annotations, missing cameras, an out-of-C1 MANO raster, render errors or masks smaller than 64 pixels are retained in the availability JSONL with an explicit reason, but are not training samples.
 
 ```bash
-python preprocess_hot3d_c1_shards.py \
+python -m scripts.data.preprocess_hot3d_c1_shards \
   --split-json configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
   --output-dir data/derived/train_quest3_c1 \
   --clips-per-shard 8 --min-mask-pixels 64 --jpeg-quality 95
 
-python verify_hot3d_derived.py \
+python -m scripts.data.verify_hot3d_derived \
   --dataset-dir data/derived/train_quest3_c1 \
   --split-json configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
   --decode-samples 500

@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageTk
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def parse_args() -> argparse.Namespace:

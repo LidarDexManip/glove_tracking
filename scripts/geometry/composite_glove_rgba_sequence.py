@@ -11,7 +11,7 @@ from hand_tracking_toolkit import camera as camera_models
 from hand_tracking_toolkit.dataset import warp_image
 from hot3d.hot3d.clips import clip_util
 
-from export_hot3d_clip_undistorted import build_canonical_camera as build_upright_c1_camera
+from scripts.data.export_hot3d_clip_undistorted import build_canonical_camera as build_upright_c1_camera
 
 
 CANONICAL_CAMERA = {

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 HOT3D_PY_ROOT = ROOT / "hot3d" / "hot3d"
 
 for _name, _value in {
