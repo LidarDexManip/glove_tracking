@@ -15,13 +15,13 @@ Clone or update the repository, activate the environment, and run:
 git pull
 chmod +x download_and_prepare_train_quest3.sh
 tmux new-session -d -s hot3d-download \
-  "bash -lc 'cd /root/glove_tracking && conda run --no-capture-output -n glove-hot3d ./download_and_prepare_train_quest3.sh 2>&1 | tee hot3d-download.log'"
+  "bash -lc 'cd /home/shaoyu/glove_tracking && conda run --no-capture-output -n glove-hot3d ./download_and_prepare_train_quest3.sh 2>&1 | tee hot3d-download.log'"
 ```
 
-Change `/root/glove_tracking` if the repository is elsewhere. Follow progress:
+Change `/home/shaoyu/glove_tracking` if the repository is elsewhere. Follow progress:
 
 ```bash
-tail -f /root/glove_tracking/hot3d-download.log
+tail -f /home/shaoyu/glove_tracking/hot3d-download.log
 ```
 
 The Hugging Face downloader is resumable. If the server or process stops,
@@ -60,13 +60,13 @@ Do not use `data/train_quest3/train_quest3/`; that indicates the wrong
 
 ```bash
 tmux new-session -d -s hot3d-preprocess \
-  "bash -lc 'cd /root/glove_tracking && conda run --no-capture-output -n glove-hot3d python preprocess_hot3d_c1_shards.py --split-json configs/hand_restoration/splits/train_quest3_sequence_seed7.json --output-dir data/derived/train_quest3_c1 --clips-per-shard 8 --min-mask-pixels 64 --jpeg-quality 95 2>&1 | tee hot3d-preprocess.log'"
+  "bash -lc 'cd /home/shaoyu/glove_tracking && conda run --no-capture-output -n glove-hot3d python preprocess_hot3d_c1_shards.py --split-json configs/hand_restoration/splits/train_quest3_sequence_seed7.json --output-dir data/derived/train_quest3_c1 --clips-per-shard 8 --min-mask-pixels 64 --jpeg-quality 95 2>&1 | tee hot3d-preprocess.log'"
 ```
 
 Follow progress:
 
 ```bash
-tail -f /root/glove_tracking/hot3d-preprocess.log
+tail -f /home/shaoyu/glove_tracking/hot3d-preprocess.log
 ```
 
 Preprocessing is resumable. A completed shard and its sidecars are validated

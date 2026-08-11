@@ -21,9 +21,13 @@ env/
 .idea/
 .vscode/
 *.code-workspace
+.ipynb_checkpoints/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local web UI/runtime state
+.gradio/
 
 # Secrets and machine-specific download manifests
 Hot3DAria_download_urls.json

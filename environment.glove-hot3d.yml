@@ -5,3 +5,4 @@ dependencies:
   - python=3.10.20
   - pip
   - git
+  - pytest=9.1.1
