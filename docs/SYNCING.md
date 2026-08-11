@@ -4,8 +4,7 @@ The repository has two different synchronization channels. Do not mix them.
 
 ## 1. Code and experiment definitions: Git
 
-Git tracks source code, tests, docs, small JSON/YAML files, and the exact HOT3D
-and SAM 2 submodule revisions. A new machine starts with:
+Git tracks source code, tests, docs, small JSON/YAML files, and the pinned HOT3D submodule revision. A new machine starts with:
 
 ```bash
 git clone --recurse-submodules <repository-url> glove_tracking
@@ -15,7 +14,6 @@ conda activate glove-hot3d
 python -m pip install -r requirements.glove-hot3d-gpu.txt
 python -m pip install -r requirements.glove-hot3d.txt
 python -m pip install -r requirements.web-ui.txt
-conda env create -f environment.glove2hand.yml
 pytest
 ```
 

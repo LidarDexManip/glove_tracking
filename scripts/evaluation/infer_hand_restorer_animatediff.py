@@ -141,7 +141,7 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for this video inference.")
 
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parents[2]
     config = load_json_config(args.config.resolve())
     data = config["data"]
     if data.get("format") != "derived_webdataset":

@@ -14,7 +14,7 @@ from hand_tracking_toolkit import rasterizer
 from hand_tracking_toolkit.dataset import warp_image
 from hot3d.hot3d.clips import clip_util
 
-from export_hot3d_clip_undistorted import build_canonical_camera
+from scripts.data.export_hot3d_clip_undistorted import build_canonical_camera
 from hot3d_glove_torch_utils import load_mano_model_torch
 
 from .conditions import ConditionBuilder, ConditionConfig

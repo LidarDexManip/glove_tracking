@@ -10,7 +10,7 @@ import numpy as np
 from hot3d.hot3d.clips import clip_util
 from hand_tracking_toolkit.dataset import warp_image
 
-from export_hot3d_clip_undistorted import CANONICAL_CAMERA, build_canonical_camera
+from scripts.data.export_hot3d_clip_undistorted import CANONICAL_CAMERA, build_canonical_camera
 
 
 def parse_args() -> argparse.Namespace:

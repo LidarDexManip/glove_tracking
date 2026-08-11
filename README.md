@@ -29,14 +29,12 @@ to another machine.
 - `configs/hand_restoration/`: tracked experiment definitions and split files.
 - `tests/`: this repository's unit tests.
 - `hot3d/`: pinned HOT3D Git submodule.
-- `third_party/sam2/`: pinned upstream SAM 2 Git submodule.
 - `docs/SCRIPTS.md`: categorized index of top-level command-line tools.
 - `README_hand_restoration.md`: implementation and experiment details.
 - `data/README.md`, `outputs/README.md`: local storage conventions.
 
-Top-level scripts have deliberately not been moved into subdirectories because
-several import sibling modules by filename. The script index makes them easier
-to navigate without changing runtime behavior.
+Secondary command-line tools are grouped under `scripts/` by workflow. Run
+Python tools with `python -m scripts.<category>.<module>` from the repository root.
 
 ## Clone
 
@@ -70,16 +68,6 @@ python -m pip install -r requirements.web-ui.txt
 
 `requirements.glove-hot3d-gpu.txt` pins the CUDA 12.8 PyTorch wheels. The
 server driver must support CUDA 12.8; no separate CUDA Toolkit is required.
-
-Aria/SAM2 preprocessing also reads Project Aria from a sibling Conda
-environment named `glove2hand`:
-
-```bash
-conda env create -f environment.glove2hand.yml
-```
-
-Both environments must live under the same Conda installation. SAM 2 source is
-pinned by the `third_party/sam2` submodule.
 
 The first diffusion run downloads `runwayml/stable-diffusion-v1-5`. Point
 `HF_HOME` at persistent storage when home directories are ephemeral:
@@ -140,9 +128,9 @@ accelerate launch --num_processes 1 train_hand_restorer.py \
 Useful inspection entry points:
 
 ```bash
-python compare_hand_restoration_checkpoints.py
+python -m scripts.evaluation.compare_hand_restoration_checkpoints
 python hand_restoration_web.py --help
-python evaluate_hand_restorer.py --help
+python -m scripts.evaluation.evaluate_hand_restorer --help
 ```
 
 Relative paths are resolved from the repository root. Run commands there.

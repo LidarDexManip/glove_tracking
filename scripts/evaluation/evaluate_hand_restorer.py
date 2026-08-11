@@ -93,7 +93,7 @@ def save_comparison(path: Path, condition: np.ndarray, generated: np.ndarray, ta
 
 def main() -> None:
     args = parse_args()
-    project_root = Path(__file__).resolve().parent
+    project_root = Path(__file__).resolve().parents[2]
     config = json.loads((args.run_dir / "config.json").read_text(encoding="utf-8"))
     data = config["data"]
     if data.get("format") != "derived_webdataset":

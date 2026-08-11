@@ -1,6 +1,7 @@
 import io
 import json
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -24,7 +25,7 @@ class SequenceSplitAndDerivedTests(unittest.TestCase):
             source = root / "definitions.json"
             output = root / "split.json"
             source.write_text(json.dumps(definitions), encoding="utf-8")
-            subprocess.run(["python", "build_hot3d_sequence_split.py", "--clip-definitions", str(source), "--clips-dir", "data/train_quest3", "--output", str(output)], check=True)
+            subprocess.run([sys.executable, "-m", "scripts.data.build_hot3d_sequence_split", "--clip-definitions", str(source), "--clips-dir", "data/train_quest3", "--output", str(output)], check=True)
             split = json.loads(output.read_text(encoding="utf-8"))
             train_ids = {Path(path).stem for path in split["train"]}
             holdout_ids = {Path(path).stem for path in split["holdout"]}
