@@ -36,13 +36,14 @@ hf auth login
 
 ## Why the old split command failed
 
-The official `clip_definitions.json` currently contains `sequence_id` and
-`device`, but does not contain a separate `participant_id`. Older versions of
-`scripts/data/build_hot3d_sequence_split.py` required both fields and therefore extracted
-zero records before reporting `No matching clip definitions found`.
+The official `clip_definitions.json` contains `sequence_id` and `device`, but
+does not contain a separate `participant_id`. Older versions of
+`scripts/data/build_hot3d_sequence_split.py` required participant metadata and
+therefore extracted zero records before reporting
+`No matching clip definitions found`.
 
-The current script derives `participant_id` from a sequence ID such as
-`P0002_210fc0da` and supports the official metadata directly.
+The current script splits globally by complete `sequence_id` groups and does
+not require or infer participant metadata.
 
 Expected paths:
 

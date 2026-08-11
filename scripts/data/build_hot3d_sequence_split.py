@@ -1,4 +1,4 @@
-"""Build a deterministic participant-stratified, sequence-disjoint HOT3D split."""
+"""Build a deterministic sequence-disjoint HOT3D split."""
 from __future__ import annotations
 
 import argparse
@@ -22,15 +22,6 @@ def extract_records(node: object, inherited_id: object | None = None) -> list[di
     if isinstance(node, dict):
         if "sequence_id" in node:
             record = dict(node)
-            if "participant_id" not in record:
-                sequence_id = str(record["sequence_id"])
-                participant_id, separator, _ = sequence_id.partition("_")
-                if not separator or not participant_id:
-                    raise ValueError(
-                        "Clip metadata has no participant_id and it cannot be "
-                        f"derived from sequence_id: {sequence_id!r}"
-                    )
-                record["participant_id"] = participant_id
             clip_id = record.get("clip_id", record.get("id", inherited_id))
             if clip_id is None:
                 raise ValueError(f"Clip metadata has no clip id: {record}")
@@ -92,49 +83,30 @@ def main() -> int:
     if not records:
         raise RuntimeError("No matching clip definitions found; check metadata structure, device, and clips-dir.")
 
-    by_participant: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
+    by_sequence: dict[str, list[dict]] = defaultdict(list)
     for record in records:
-        by_participant[str(record["participant_id"])][str(record["sequence_id"])].append(record)
+        by_sequence[str(record["sequence_id"])].append(record)
 
-    train_records: list[dict] = []
-    holdout_records: list[dict] = []
-    participant_stats = {}
-    unsplittable = []
-    for participant in sorted(by_participant):
-        sequences = by_participant[participant]
-        counts = {sequence: len(items) for sequence, items in sequences.items()}
-        selected = closest_holdout_subset(counts, args.holdout_fraction, random.Random(f"{args.seed}:{participant}"))
-        if not selected:
-            unsplittable.append(participant)
-        for sequence, items in sequences.items():
-            (holdout_records if sequence in selected else train_records).extend(items)
-        participant_stats[participant] = {
-            "sequence_count": len(sequences),
-            "clip_count": sum(counts.values()),
-            "train_sequences": sorted(set(sequences) - selected),
-            "holdout_sequences": sorted(selected),
-            "train_clips": sum(counts[name] for name in set(sequences) - selected),
-            "holdout_clips": sum(counts[name] for name in selected),
-        }
+    sequence_counts = {sequence: len(items) for sequence, items in by_sequence.items()}
+    selected = closest_holdout_subset(sequence_counts, args.holdout_fraction, random.Random(args.seed))
+    train_records = [item for sequence, items in by_sequence.items() if sequence not in selected for item in items]
+    holdout_records = [item for sequence, items in by_sequence.items() if sequence in selected for item in items]
 
     train_sequences = {str(item["sequence_id"]) for item in train_records}
     holdout_sequences = {str(item["sequence_id"]) for item in holdout_records}
     overlap = train_sequences & holdout_sequences
     if overlap:
         raise AssertionError(f"Sequence leakage: {sorted(overlap)}")
-    train_participants = {str(item["participant_id"]) for item in train_records}
-    holdout_participants = {str(item["participant_id"]) for item in holdout_records}
     result = {
-        "schema_version": 2,
+        "schema_version": 3,
         "dataset": "HOT3D-Clips/train_quest3",
         "seed": args.seed,
         "split_unit": "sequence_id",
-        "participant_overlap_required_when_possible": True,
         "holdout_fraction_target": args.holdout_fraction,
         "clip_definitions": str(args.clip_definitions),
         "train": [item["clip_tar"] for item in sorted(train_records, key=lambda value: value["clip_id"])],
         "holdout": [item["clip_tar"] for item in sorted(holdout_records, key=lambda value: value["clip_id"])],
-        "clip_metadata": {item["clip_id"]: {"participant_id": item["participant_id"], "sequence_id": item["sequence_id"], "device": item.get("device", item.get("device_type", args.device))} for item in records},
+        "clip_metadata": {item["clip_id"]: {"sequence_id": item["sequence_id"], "device": item.get("device", item.get("device_type", args.device))} for item in records},
         "statistics": {
             "total_clips": len(records),
             "train_clips": len(train_records),
@@ -142,11 +114,6 @@ def main() -> int:
             "actual_holdout_fraction": len(holdout_records) / len(records),
             "train_sequences": len(train_sequences),
             "holdout_sequences": len(holdout_sequences),
-            "train_participants": sorted(train_participants),
-            "holdout_participants": sorted(holdout_participants),
-            "participants_in_both": sorted(train_participants & holdout_participants),
-            "participants_with_fewer_than_two_sequences": unsplittable,
-            "participants": participant_stats,
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -154,9 +121,6 @@ def main() -> int:
     print(f"Wrote {args.output}")
     print(f"clips train={len(train_records)} holdout={len(holdout_records)} fraction={len(holdout_records)/len(records):.4f}")
     print(f"sequences train={len(train_sequences)} holdout={len(holdout_sequences)} overlap=0")
-    print(f"participants train={len(train_participants)} holdout={len(holdout_participants)} both={len(train_participants & holdout_participants)}")
-    if unsplittable:
-        print(f"WARNING participants with <2 sequences (train only): {unsplittable}")
     return 0
 
 

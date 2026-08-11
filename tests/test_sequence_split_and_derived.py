@@ -15,13 +15,12 @@ from hand_restoration.derived_dataset import DerivedHandRestorationDataset
 
 
 class SequenceSplitAndDerivedTests(unittest.TestCase):
-    def test_participant_stratified_sequence_split_has_no_leakage(self):
+    def test_sequence_split_has_no_leakage_without_participant_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             definitions = []
-            for participant in ("p1", "p2"):
-                for sequence in range(5):
-                    definitions.append({"clip_id": f"clip-{len(definitions):06d}", "participant_id": participant, "sequence_id": f"{participant}-s{sequence}", "device": "Quest3"})
+            for sequence in range(10):
+                definitions.append({"clip_id": f"clip-{len(definitions):06d}", "sequence_id": f"sequence-{sequence}", "device": "Quest3"})
             source = root / "definitions.json"
             output = root / "split.json"
             source.write_text(json.dumps(definitions), encoding="utf-8")
@@ -32,7 +31,8 @@ class SequenceSplitAndDerivedTests(unittest.TestCase):
             train_sequences = {split["clip_metadata"][key]["sequence_id"] for key in train_ids}
             holdout_sequences = {split["clip_metadata"][key]["sequence_id"] for key in holdout_ids}
             self.assertFalse(train_sequences & holdout_sequences)
-            self.assertEqual(set(split["statistics"]["participants_in_both"]), {"p1", "p2"})
+            self.assertEqual(split["schema_version"], 3)
+            self.assertNotIn("train_participants", split["statistics"])
             self.assertEqual(len(holdout_ids), 2)
 
     def test_derived_tar_reader_builds_masked_replace_at_requested_size(self):

@@ -38,7 +38,7 @@ fi
 echo "Found $clip_count Quest3 clip tar files."
 
 echo "[3/3] Building the deterministic sequence-disjoint split."
-python build_hot3d_sequence_split.py \
+python -m scripts.data.build_hot3d_sequence_split \
   --clip-definitions data/clip_definitions.json \
   --clips-dir data/train_quest3 \
   --output configs/hand_restoration/splits/train_quest3_sequence_seed7.json \
