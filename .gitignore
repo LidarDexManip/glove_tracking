@@ -46,6 +46,7 @@ model/*
 # Generated experiments and training checkpoints
 outputs/*
 !outputs/README.md
+/outputs
 *.pt
 *.pth
 *.ckpt
