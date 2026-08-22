@@ -7,6 +7,66 @@ import torch
 import torch.nn.functional as F
 
 
+LOSS_STAT_NAMES = (
+    "weighted_error_sum",
+    "weighted_count",
+    "unweighted_error_sum",
+    "unweighted_count",
+    "hand_error_sum",
+    "hand_count",
+    "background_error_sum",
+    "background_count",
+)
+
+
+def regional_weighted_mse(
+    squared_error: torch.Tensor,
+    edit_mask: torch.Tensor | None,
+    hand_loss_weight: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the weighted MSE and detached sums/counts for regional logging."""
+    if hand_loss_weight < 1.0:
+        raise ValueError("hand_loss_weight must be at least 1.0")
+    if squared_error.ndim != 4:
+        raise ValueError("squared_error must be a BCHW tensor")
+
+    if edit_mask is None:
+        latent_mask = torch.zeros_like(squared_error[:, :1], dtype=torch.float32)
+    else:
+        mask = edit_mask.to(
+            device=squared_error.device, dtype=squared_error.dtype, non_blocking=True
+        ).clamp(0.0, 1.0)
+        # Max pooling keeps thin fingers represented after the 512 -> 64 latent
+        # reduction.
+        latent_mask = F.adaptive_max_pool2d(mask, squared_error.shape[-2:]).float()
+
+    channels = squared_error.shape[1]
+    weights = 1.0 + (float(hand_loss_weight) - 1.0) * latent_mask
+    weighted_error_sum = (squared_error * weights).sum()
+    weighted_count = weights.sum() * channels
+    unweighted_error_sum = squared_error.sum()
+    unweighted_count = squared_error.new_tensor(squared_error.numel())
+    hand_error_sum = (squared_error * latent_mask).sum()
+    hand_count = latent_mask.sum() * channels
+    background_mask = 1.0 - latent_mask
+    background_error_sum = (squared_error * background_mask).sum()
+    background_count = background_mask.sum() * channels
+
+    statistics = torch.stack(
+        (
+            weighted_error_sum,
+            weighted_count,
+            unweighted_error_sum,
+            unweighted_count,
+            hand_error_sum,
+            hand_count,
+            background_error_sum,
+            background_count,
+        )
+    ).detach()
+    return weighted_error_sum / weighted_count.clamp_min(1.0), statistics
+
+
 def _require_diffusers() -> None:
     try:
         import accelerate  # noqa: F401
@@ -73,9 +133,12 @@ class ControlNetHandRestorer(torch.nn.Module):
         self,
         target_rgb: torch.Tensor,
         condition_rgb: torch.Tensor,
+        edit_mask: torch.Tensor | None = None,
+        hand_loss_weight: float = 1.0,
         generator: torch.Generator | None = None,
-    ) -> torch.Tensor:
-        """Standard latent diffusion epsilon-prediction objective.
+        return_statistics: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        """Latent diffusion objective with optional edit-region weighting.
 
         Both inputs must be Bx3xHxW float images in [-1, 1].
         """
@@ -107,7 +170,13 @@ class ControlNetHandRestorer(torch.nn.Module):
         target = noise
         if self.noise_scheduler.config.prediction_type == "v_prediction":
             target = self.noise_scheduler.get_velocity(latents, noise, timesteps)
-        return F.mse_loss(prediction.float(), target.float(), reduction="mean")
+        squared_error = (prediction.float() - target.float()).square()
+        loss, statistics = regional_weighted_mse(
+            squared_error, edit_mask, hand_loss_weight
+        )
+        if return_statistics:
+            return loss, statistics
+        return loss
 
     def save_controlnet(self, path: str | Path) -> None:
         path = Path(path)

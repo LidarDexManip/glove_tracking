@@ -22,9 +22,15 @@ from torch.utils.data import DataLoader, Subset
 from hand_restoration.conditions import ConditionConfig
 from hand_restoration.config import load_json_config
 from hand_restoration.data_config import resolve_clip_splits
-from hand_restoration.diffusion import ControlNetHandRestorer, DiffusionConfig
+from hand_restoration.diffusion import (
+    LOSS_STAT_NAMES,
+    ControlNetHandRestorer,
+    DiffusionConfig,
+)
 from hand_restoration.hot3d_dataset import Hot3DSingleFrameDataset
 from hand_restoration.derived_dataset import DerivedHandRestorationDataset
+from hand_restoration.hugg_aria_dataset import HuggAriaGaussianDataset
+from hand_restoration.samplers import TemporalChunkShuffleSampler
 
 
 def set_seed(seed: int) -> None:
@@ -74,6 +80,23 @@ def make_derived_dataset(config: dict, manifest: Path, include_numpy: bool = Fal
     )
 
 
+def make_hugg_aria_dataset(config: dict, manifest: Path, include_numpy: bool = False) -> HuggAriaGaussianDataset:
+    data = config["data"]
+    root = Path(__file__).resolve().parent
+    return HuggAriaGaussianDataset(
+        manifest=manifest,
+        pinhole_root=root / data["pinhole_root"],
+        gaussian_root=root / data["gaussian_root"],
+        mask_root=root / data["mask_root"],
+        output_size=data.get("output_size", 512),
+        condition_variant=data.get("condition_variant", "sam_mask"),
+        gaussian_opacity=data.get("gaussian_opacity", 1.0),
+        gaussian_threshold=data.get("gaussian_threshold", 16),
+        include_numpy=include_numpy,
+        max_open_sequences=data.get("max_open_sequences", 2),
+    )
+
+
 def fixed_subset(dataset, limit: int | None, seed: int):
     if not limit or limit >= len(dataset):
         return dataset
@@ -97,6 +120,27 @@ def resolve_period(value, steps_per_epoch: int) -> int:
     if match:
         return int(match.group(1)) * steps_per_epoch
     return max(1, int(value))
+
+
+def summarize_loss_statistics(statistics: torch.Tensor) -> dict[str, float]:
+    values = dict(zip(LOSS_STAT_NAMES, statistics.detach().double().cpu().tolist()))
+
+    def mean(sum_key: str, count_key: str) -> float:
+        count = values[count_key]
+        return float("nan") if count <= 0 else values[sum_key] / count
+
+    total_count = values["unweighted_count"]
+    return {
+        "weighted_loss": mean("weighted_error_sum", "weighted_count"),
+        "unweighted_loss": mean("unweighted_error_sum", "unweighted_count"),
+        "hand_region_loss": mean("hand_error_sum", "hand_count"),
+        "background_region_loss": mean(
+            "background_error_sum", "background_count"
+        ),
+        "hand_latent_fraction": (
+            float("nan") if total_count <= 0 else values["hand_count"] / total_count
+        ),
+    }
 
 
 def save_run_metadata(output: Path, config_path: Path, split_path: Path | None, config: dict, train_size: int, val_size: int) -> None:
@@ -132,21 +176,31 @@ def save_run_metadata(output: Path, config_path: Path, split_path: Path | None, 
 
 
 @torch.no_grad()
-def validation_loss(restorer, loader, accelerator, seed: int, max_batches: int | None) -> float:
+def validation_loss(
+    restorer, loader, accelerator, seed: int, max_batches: int | None,
+    hand_loss_weight: float,
+) -> dict[str, float]:
     restorer.controlnet.eval()
-    total = torch.zeros(2, device=accelerator.device, dtype=torch.float64)
+    total = torch.zeros(
+        len(LOSS_STAT_NAMES), device=accelerator.device, dtype=torch.float64
+    )
     for batch_index, batch in enumerate(loader):
         if max_batches is not None and batch_index >= max_batches:
             break
         generator = torch.Generator(device=accelerator.device).manual_seed(seed + batch_index)
-        loss = restorer.training_loss(batch["target_rgb"], batch["condition_rgb"], generator=generator)
-        batch_size = batch["target_rgb"].shape[0]
-        total += torch.tensor([float(loss) * batch_size, batch_size], device=accelerator.device, dtype=torch.float64)
+        _, statistics = restorer.training_loss(
+            batch["target_rgb"], batch["condition_rgb"],
+            edit_mask=batch.get("edit_mask"),
+            hand_loss_weight=hand_loss_weight,
+            generator=generator,
+            return_statistics=True,
+        )
+        total += statistics.double()
     total = accelerator.reduce(total, reduction="sum")
     restorer.controlnet.train()
-    if total[1].item() == 0:
+    if total[3].item() == 0:
         raise RuntimeError("Validation loader produced no samples.")
-    return float((total[0] / total[1]).item())
+    return summarize_loss_statistics(total)
 
 
 def main() -> None:
@@ -176,6 +230,13 @@ def main() -> None:
         train_dataset = make_derived_dataset(config, train_manifest)
         val_dataset = make_derived_dataset(config, val_manifest) if val_manifest else None
         split_path = root / data["source_split_json"] if data.get("source_split_json") else None
+    elif data_format == "hugg_aria_video":
+        data = config["data"]
+        train_manifest = root / data["train_manifest"]
+        val_manifest = root / data["val_manifest"] if data.get("val_manifest") else None
+        train_dataset = make_hugg_aria_dataset(config, train_manifest)
+        val_dataset = make_hugg_aria_dataset(config, val_manifest) if val_manifest else None
+        split_path = root / data["manifest_summary"] if data.get("manifest_summary") else None
     elif data_format == "raw_hot3d":
         train_clips, val_clips, split_path = resolve_clip_splits(config, root)
         train_dataset = make_dataset(config, train_clips)
@@ -189,7 +250,22 @@ def main() -> None:
     workers = int(train_cfg.get("num_workers", 0))
     train_generator = torch.Generator().manual_seed(seed)
     common_loader_options = loader_options(train_cfg, workers)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=train_generator, **common_loader_options)
+    chunk_frames = train_cfg.get("chunk_shuffle_frames")
+    train_sampler = None
+    if chunk_frames is not None:
+        if isinstance(train_dataset, Subset):
+            raise ValueError("chunk_shuffle_frames cannot be combined with max_train_samples")
+        if not hasattr(train_dataset, "samples"):
+            raise ValueError("chunk_shuffle_frames requires a manifest-backed dataset")
+        train_sampler = TemporalChunkShuffleSampler(
+            train_dataset.samples, int(chunk_frames), seed=seed
+        )
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size,
+        shuffle=bool(train_cfg.get("shuffle", True)) if train_sampler is None else False,
+        sampler=train_sampler, generator=train_generator,
+        **common_loader_options,
+    )
     val_loader = None
     if val_dataset is not None:
         val_loader = DataLoader(val_dataset, batch_size=int(train_cfg.get("validation_batch_size", batch_size)), shuffle=False, **common_loader_options)
@@ -218,6 +294,11 @@ def main() -> None:
         match = re.search(r"(?:controlnet_step|global_step)(\d+)$", args.resume.stem)
         if match:
             resume_step = int(match.group(1))
+        else:
+            checkpoint_metadata = torch.load(
+                args.resume, map_location="cpu", weights_only=True
+            )
+            resume_step = int(checkpoint_metadata.get("global_step", 0))
     optimizer = torch.optim.AdamW(restorer.trainable_parameters, lr=train_cfg.get("learning_rate", 1e-5), betas=(0.9, 0.999), weight_decay=train_cfg.get("weight_decay", 1e-2))
     scheduler = get_scheduler(train_cfg.get("lr_scheduler", "constant"), optimizer=optimizer, num_training_steps=steps * accelerator.num_processes, num_warmup_steps=train_cfg.get("warmup_steps", 0))
     if val_loader is None:
@@ -229,7 +310,16 @@ def main() -> None:
     log_file = None
     log_writer = None
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    fields = ["run_id", "resume_from", "run_step", "total_step", "epoch", "batch_in_epoch", "run_samples_seen", "sequence_id", "frame_id", "loss", "loss_ema", "validation_loss", "learning_rate", "grad_norm", "step_seconds", "elapsed_seconds", "cuda_allocated_mb", "cuda_reserved_mb"]
+    fields = [
+        "run_id", "resume_from", "run_step", "total_step", "epoch",
+        "batch_in_epoch", "run_samples_seen", "sequence_id", "frame_id",
+        "loss", "loss_ema", "unweighted_loss", "hand_region_loss",
+        "background_region_loss", "hand_latent_fraction", "validation_loss",
+        "validation_unweighted_loss", "validation_hand_region_loss",
+        "validation_background_region_loss", "validation_hand_latent_fraction",
+        "learning_rate", "grad_norm", "step_seconds", "elapsed_seconds",
+        "cuda_allocated_mb", "cuda_reserved_mb",
+    ]
     if accelerator.is_main_process:
         log_path = output / "training_log.csv"
         write_header = not log_path.exists() or log_path.stat().st_size == 0
@@ -237,6 +327,7 @@ def main() -> None:
         log_writer = csv.DictWriter(log_file, fieldnames=fields)
         if write_header:
             log_writer.writeheader()
+    hand_loss_weight = float(train_cfg.get("hand_loss_weight", 1.0))
 
     global_step = 0
     samples_seen = 0
@@ -251,6 +342,9 @@ def main() -> None:
     validation_seed = int(train_cfg.get("validation_seed", seed))
     max_validation_batches = train_cfg.get("max_validation_batches")
     run_start = previous_step_end = time.perf_counter()
+    pending_statistics = torch.zeros(
+        len(LOSS_STAT_NAMES), device=device, dtype=torch.float64
+    )
     optimizer.zero_grad(set_to_none=True)
     try:
         while global_step < steps:
@@ -258,7 +352,13 @@ def main() -> None:
                 samples_seen += int(batch["target_rgb"].shape[0]) * accelerator.num_processes
                 grad_norm_value = float("nan")
                 with accelerator.accumulate(restorer.controlnet):
-                    loss = restorer.training_loss(batch["target_rgb"], batch["condition_rgb"])
+                    loss, batch_statistics = restorer.training_loss(
+                        batch["target_rgb"], batch["condition_rgb"],
+                        edit_mask=batch.get("edit_mask"),
+                        hand_loss_weight=hand_loss_weight,
+                        return_statistics=True,
+                    )
+                    pending_statistics += batch_statistics.double()
                     if not torch.isfinite(loss):
                         raise FloatingPointError(f"Non-finite diffusion loss at optimizer step {global_step}: {loss.item()}")
                     accelerator.backward(loss)
@@ -273,23 +373,60 @@ def main() -> None:
 
                 global_step += 1
                 total_step = resume_step + global_step
-                loss_value = float(loss.detach().float().item())
+                reduced_statistics = accelerator.reduce(
+                    pending_statistics, reduction="sum"
+                )
+                loss_metrics = summarize_loss_statistics(reduced_statistics)
+                pending_statistics.zero_()
+                loss_value = loss_metrics["weighted_loss"]
                 loss_ema = loss_value if loss_ema is None else ema_decay * loss_ema + (1.0 - ema_decay) * loss_value
-                validation_value = None
+                validation_metrics = None
                 validation_due = val_loader is not None and (total_step % validation_every == 0 or global_step == steps)
                 if validation_due:
-                    validation_value = validation_loss(restorer, val_loader, accelerator, validation_seed, max_validation_batches)
+                    validation_metrics = validation_loss(
+                        restorer, val_loader, accelerator, validation_seed,
+                        max_validation_batches, hand_loss_weight,
+                    )
                 now = time.perf_counter()
                 step_seconds = now - previous_step_end
                 previous_step_end = now
                 if accelerator.is_main_process and global_step % csv_every == 0:
                     allocated = torch.cuda.memory_allocated(device) / 1024**2 if torch.cuda.is_available() else 0
                     reserved = torch.cuda.memory_reserved(device) / 1024**2 if torch.cuda.is_available() else 0
-                    log_writer.writerow({"run_id": run_id, "resume_from": str(args.resume or ""), "run_step": global_step, "total_step": total_step, "epoch": epoch, "batch_in_epoch": batch_in_epoch, "run_samples_seen": samples_seen, "sequence_id": format_batch_metadata(batch, "sequence_id"), "frame_id": format_batch_metadata(batch, "frame_id"), "loss": f"{loss_value:.9g}", "loss_ema": f"{loss_ema:.9g}", "validation_loss": "" if validation_value is None else f"{validation_value:.9g}", "learning_rate": f"{optimizer.param_groups[0]['lr']:.9g}", "grad_norm": f"{grad_norm_value:.9g}", "step_seconds": f"{step_seconds:.6f}", "elapsed_seconds": f"{now-run_start:.6f}", "cuda_allocated_mb": f"{allocated:.3f}", "cuda_reserved_mb": f"{reserved:.3f}"})
+                    log_writer.writerow({
+                        "run_id": run_id, "resume_from": str(args.resume or ""),
+                        "run_step": global_step, "total_step": total_step,
+                        "epoch": epoch, "batch_in_epoch": batch_in_epoch,
+                        "run_samples_seen": samples_seen,
+                        "sequence_id": format_batch_metadata(batch, "sequence_id"),
+                        "frame_id": format_batch_metadata(batch, "frame_id"),
+                        "loss": f"{loss_value:.9g}", "loss_ema": f"{loss_ema:.9g}",
+                        "unweighted_loss": f"{loss_metrics['unweighted_loss']:.9g}",
+                        "hand_region_loss": f"{loss_metrics['hand_region_loss']:.9g}",
+                        "background_region_loss": f"{loss_metrics['background_region_loss']:.9g}",
+                        "hand_latent_fraction": f"{loss_metrics['hand_latent_fraction']:.9g}",
+                        "validation_loss": "" if validation_metrics is None else f"{validation_metrics['weighted_loss']:.9g}",
+                        "validation_unweighted_loss": "" if validation_metrics is None else f"{validation_metrics['unweighted_loss']:.9g}",
+                        "validation_hand_region_loss": "" if validation_metrics is None else f"{validation_metrics['hand_region_loss']:.9g}",
+                        "validation_background_region_loss": "" if validation_metrics is None else f"{validation_metrics['background_region_loss']:.9g}",
+                        "validation_hand_latent_fraction": "" if validation_metrics is None else f"{validation_metrics['hand_latent_fraction']:.9g}",
+                        "learning_rate": f"{optimizer.param_groups[0]['lr']:.9g}",
+                        "grad_norm": f"{grad_norm_value:.9g}",
+                        "step_seconds": f"{step_seconds:.6f}",
+                        "elapsed_seconds": f"{now-run_start:.6f}",
+                        "cuda_allocated_mb": f"{allocated:.3f}",
+                        "cuda_reserved_mb": f"{reserved:.3f}",
+                    })
                     log_file.flush()
                 if accelerator.is_main_process and global_step % train_cfg.get("log_every", 10) == 0:
-                    suffix = "" if validation_value is None else f" validation_loss={validation_value:.6f}"
-                    print(f"step={total_step:05d} epoch={epoch} samples={samples_seen} loss={loss_value:.6f} loss_ema={loss_ema:.6f}{suffix}")
+                    suffix = "" if validation_metrics is None else f" validation_loss={validation_metrics['weighted_loss']:.6f}"
+                    print(
+                        f"step={total_step:05d} epoch={epoch} samples={samples_seen} "
+                        f"loss={loss_value:.6f} loss_ema={loss_ema:.6f} "
+                        f"hand_loss={loss_metrics['hand_region_loss']:.6f} "
+                        f"background_loss={loss_metrics['background_region_loss']:.6f} "
+                        f"hand_fraction={loss_metrics['hand_latent_fraction']:.4f}{suffix}"
+                    )
                 checkpoint_due = total_step % checkpoint_every == 0
                 if checkpoint_due:
                     accelerator.wait_for_everyone()
