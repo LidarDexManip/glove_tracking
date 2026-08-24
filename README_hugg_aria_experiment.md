@@ -120,14 +120,16 @@ optimizer or scheduler state, so recovery is a warm start.
 
 ## Curves and browser inference
 
-Generate the effective weight-10 path while replacing the abandoned,
-overlapping log branch with the later continuation rows:
+Generate the connected 20-epoch path (weight 5 followed by weight 10) while
+replacing the abandoned, overlapping interruption branch with the later
+checkpoint-backed continuation rows:
 
 ```bash
 python plot_hugg_weight10_training.py \
   outputs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs/training_log.csv \
-  --output outputs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs/weight10_training_curves.png \
-  --epoch-csv outputs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs/weight10_epoch_metrics.csv
+  --base-log outputs/hand_restoration/hugg_aria_aligned_sam_weighted_chunk5s_512_8gpu_batch256_epochs10/training_log.csv \
+  --output outputs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs/full_training_curves_weight5_to10.png \
+  --epoch-csv outputs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs/full_epoch_metrics_weight5_to10.csv
 ```
 
 Start the local Gradio page on one GPU:

@@ -186,12 +186,7 @@ class HuggAriaInferenceApp:
             f"Done: `{checkpoint.name}` · `{metadata['sequence_id']}` frame "
             f"{metadata['frame_id']} · saved to `{experiment}`."
         )
-        return (
-            rgb_float_to_u8(sample["condition_rgb_np"]),
-            rgb_float_to_u8(result.generated),
-            rgb_float_to_u8(sample["target_rgb_np"]),
-            status,
-        )
+        return rgb_float_to_u8(result.generated), status
 
 
 def build_ui(app: HuggAriaInferenceApp):
@@ -262,7 +257,7 @@ def build_ui(app: HuggAriaInferenceApp):
         run_button.click(
             app.infer,
             [sample, checkpoint, steps, seed],
-            [condition, output, target, status],
+            [output, status],
         )
         demo.load(app.preview, [sample], [condition, output, target, status])
 
