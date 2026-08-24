@@ -37,28 +37,84 @@ def overlay_frame(
     frame_index: int,
     chunk_status: str,
     alpha: float,
+    training_info: dict | None = None,
 ) -> np.ndarray:
     result = image.copy()
-    colors = {1: np.array((70, 210, 70), dtype=np.float32), 2: np.array((40, 140, 255), dtype=np.float32)}
+    colors = {
+        1: np.array((70, 210, 70), dtype=np.float32),
+        2: np.array((40, 140, 255), dtype=np.float32),
+    }
     for label, color in colors.items():
         mask = labels == label
         if mask.any():
-            result[mask] = ((1.0 - alpha) * result[mask] + alpha * color).astype(np.uint8)
-            contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            result[mask] = (
+                (1.0 - alpha) * result[mask] + alpha * color
+            ).astype(np.uint8)
+            contours, _ = cv2.findContours(
+                mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
             cv2.drawContours(result, contours, -1, color.astype(int).tolist(), 2)
 
     left_area = int((labels == 1).sum())
     right_area = int((labels == 2).sum())
-    lines = [f"frame={frame_index}", f"left={left_area} right={right_area}"]
-    if chunk_status == "no_prompt":
-        lines.append("NO MANO PROMPT - MASK UNAVAILABLE")
+    white = (255, 255, 255)
+    lines = [
+        (f"frame={frame_index}  SAM: {chunk_status}", white),
+        (f"mask pixels: left={left_area} right={right_area}", white),
+    ]
+    if training_info is not None:
+        eligible = bool(training_info['training_eligible'])
+        verdict = "TRAIN: KEEP" if eligible else "TRAIN: FILTERED OUT"
+        verdict_color = (70, 235, 70) if eligible else (55, 55, 255)
+        reason = str(training_info['training_filter_reason'])
+        if not eligible and reason == "ok":
+            reason = (
+                "no_sam_output" if not training_info['sam_complete']
+                else "not_training_eligible"
+            )
+        lines.extend([
+            (verdict, verdict_color),
+            (f"reason: {reason}", verdict_color if not eligible else white),
+            (
+                "flags: qa={} mano_pose={} visible={} exposure={}".format(
+                    training_info["qa_pass"],
+                    training_info["mano_pose_qa_available"],
+                    training_info["hand_visible"],
+                    training_info["good_exposure"],
+                ),
+                white,
+            ),
+            (
+                "gaussian: L={} R={}  |  prompt: L={} R={}".format(
+                    training_info["gaussian_left_valid"],
+                    training_info["gaussian_right_valid"],
+                    training_info["left_prompt_source"] or "none",
+                    training_info["right_prompt_source"] or "none",
+                ),
+                white,
+            ),
+        ])
+    elif chunk_status == "no_prompt":
+        lines.append(("NO MANO PROMPT - MASK UNAVAILABLE", (55, 55, 255)))
+    elif chunk_status.startswith("filtered_") or chunk_status == "pending":
+        lines.append((chunk_status.upper(), (55, 55, 255)))
     else:
-        lines.append("SAM2.1 Large video predictor")
-    for row, text in enumerate(lines):
-        y = 34 + row * 30
-        color = (50, 50, 255) if chunk_status == "no_prompt" and row == 2 else (255, 255, 255)
-        cv2.putText(result, text, (18, y), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (0, 0, 0), 4, cv2.LINE_AA)
-        cv2.putText(result, text, (18, y), cv2.FONT_HERSHEY_SIMPLEX, 0.72, color, 1, cv2.LINE_AA)
+        lines.append(("SAM2.1 Large video predictor", white))
+
+    line_height = 31
+    panel_height = 18 + line_height * len(lines)
+    panel_width = min(result.shape[1] - 20, 1040)
+    panel = result[8:panel_height, 8:panel_width + 8].copy()
+    dark = np.zeros_like(panel)
+    result[8:panel_height, 8:panel_width + 8] = cv2.addWeighted(
+        panel, 0.42, dark, 0.58, 0.0
+    )
+    for row, (text, color) in enumerate(lines):
+        y = 34 + row * line_height
+        cv2.putText(result, text, (18, y), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.68, (0, 0, 0), 4, cv2.LINE_AA)
+        cv2.putText(result, text, (18, y), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.68, color, 1, cv2.LINE_AA)
     return result
 
 
@@ -74,7 +130,13 @@ def main() -> None:
     connection = sqlite3.connect(database)
     metadata = {key: json.loads(value) for key, value in connection.execute("SELECT key,value_json FROM metadata")}
     height, width = int(metadata["height"]), int(metadata["width"])
-    chunk_status = {
+    tables = {str(row[0]) for row in connection.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    frame_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(frames)")}
+    is_v3 = "training_eligible" in frame_columns
+    is_v2 = "episodes" in tables
+    chunk_status = {} if is_v2 else {
         int(index): status
         for index, status in connection.execute("SELECT chunk_index,status FROM chunks")
     }
@@ -100,15 +162,39 @@ def main() -> None:
             ok, image = capture.read()
             if not ok:
                 break
-            row = connection.execute(
-                "SELECT chunk_index,labels_zlib FROM frames WHERE frame_index=?", (frame_index,)
-            ).fetchone()
-            if row is None:
-                raise KeyError(f"Frame {frame_index} is absent from {database}")
-            chunk_index, blob = row
+            training_info = None
+            if is_v3:
+                fields = (
+                    "sam_complete", "training_candidate", "training_eligible",
+                    "training_filter_reason", "qa_pass", "mano_pose_qa_available",
+                    "hand_visible", "good_exposure", "gaussian_left_valid",
+                    "gaussian_right_valid", "left_prompt_source", "right_prompt_source",
+                )
+                query = (
+                    "SELECT status,labels_zlib," + ",".join(fields)
+                    + " FROM frames WHERE frame_index=?"
+                )
+                row = connection.execute(query, (frame_index,)).fetchone()
+                if row is None:
+                    raise KeyError(f"Frame {frame_index} is absent from {database}")
+                status_or_chunk, blob = row[:2]
+                training_info = dict(zip(fields, row[2:]))
+            else:
+                query = (
+                    "SELECT status,labels_zlib FROM frames WHERE frame_index=?"
+                    if is_v2 else
+                    "SELECT chunk_index,labels_zlib FROM frames WHERE frame_index=?"
+                )
+                row = connection.execute(query, (frame_index,)).fetchone()
+                if row is None:
+                    raise KeyError(f"Frame {frame_index} is absent from {database}")
+                status_or_chunk, blob = row
             labels = np.frombuffer(zlib.decompress(blob), dtype=np.uint8).reshape(height, width)
             rendered = overlay_frame(
-                image, labels, frame_index, chunk_status[int(chunk_index)], float(args.alpha)
+                image, labels, frame_index,
+                str(status_or_chunk) if is_v2 else chunk_status[int(status_or_chunk)],
+                float(args.alpha),
+                training_info,
             )
             if args.scale != 1.0:
                 rendered = cv2.resize(rendered, None, fx=args.scale, fy=args.scale, interpolation=cv2.INTER_AREA)
