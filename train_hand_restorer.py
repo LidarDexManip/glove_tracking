@@ -262,6 +262,8 @@ def make_hugg_aria_dataset(config: dict, manifest: Path, include_numpy: bool = F
         condition_variant=data.get("condition_variant", "sam_mask"),
         gaussian_opacity=data.get("gaussian_opacity", 1.0),
         gaussian_threshold=data.get("gaussian_threshold", 16),
+        render_kind=data.get("render_kind", "gaussian"),
+        loss_mask_source=data.get("loss_mask_source", "overlay"),
         include_numpy=include_numpy,
         max_open_sequences=data.get("max_open_sequences", 2),
     )
@@ -481,7 +483,15 @@ def main() -> None:
             )
             resume_step = int(checkpoint_metadata.get("global_step", 0))
     optimizer = torch.optim.AdamW(restorer.trainable_parameters, lr=train_cfg.get("learning_rate", 1e-5), betas=(0.9, 0.999), weight_decay=train_cfg.get("weight_decay", 1e-2))
-    scheduler = get_scheduler(train_cfg.get("lr_scheduler", "constant"), optimizer=optimizer, num_training_steps=steps * accelerator.num_processes, num_warmup_steps=train_cfg.get("warmup_steps", 0))
+    # AcceleratedScheduler advances once per process at every optimizer step;
+    # scale both scheduler lengths so config warmup_steps remains expressed in
+    # optimizer steps and does not silently shrink when world size increases.
+    scheduler = get_scheduler(
+        train_cfg.get("lr_scheduler", "constant"), optimizer=optimizer,
+        num_training_steps=steps * accelerator.num_processes,
+        num_warmup_steps=int(train_cfg.get("warmup_steps", 0))
+        * accelerator.num_processes,
+    )
     if val_loader is None:
         restorer.controlnet, optimizer, train_loader, scheduler = accelerator.prepare(restorer.controlnet, optimizer, train_loader, scheduler)
     else:

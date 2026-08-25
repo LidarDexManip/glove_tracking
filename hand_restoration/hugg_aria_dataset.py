@@ -12,6 +12,20 @@ import torch
 from torch.utils.data import Dataset
 
 
+def overlay_and_loss_masks(
+    render_foreground: np.ndarray,
+    sam_mask: np.ndarray | None,
+    loss_mask_source: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    if loss_mask_source not in {"overlay", "sam"}:
+        raise ValueError("loss_mask_source must be overlay or sam")
+    if sam_mask is None:
+        return render_foreground, render_foreground
+    overlay_mask = render_foreground & sam_mask
+    loss_mask = sam_mask if loss_mask_source == "sam" else overlay_mask
+    return overlay_mask, loss_mask
+
+
 class HuggAriaGaussianDataset(Dataset):
     """Read aligned RGB/Gaussian videos and optional SAM labels on demand."""
 
@@ -25,6 +39,8 @@ class HuggAriaGaussianDataset(Dataset):
         condition_variant: str = "sam_mask",
         gaussian_opacity: float = 1.0,
         gaussian_threshold: int = 16,
+        render_kind: str = "gaussian",
+        loss_mask_source: str = "overlay",
         include_numpy: bool = False,
         max_open_sequences: int = 2,
     ) -> None:
@@ -47,6 +63,12 @@ class HuggAriaGaussianDataset(Dataset):
         self.condition_variant = condition_variant
         self.gaussian_opacity = float(gaussian_opacity)
         self.gaussian_threshold = int(gaussian_threshold)
+        if render_kind not in {"gaussian", "mano"}:
+            raise ValueError("render_kind must be gaussian or mano")
+        self.render_kind = render_kind
+        if loss_mask_source not in {"overlay", "sam"}:
+            raise ValueError("loss_mask_source must be overlay or sam")
+        self.loss_mask_source = loss_mask_source
         self.include_numpy = bool(include_numpy)
         self.max_open_sequences = int(max_open_sequences)
         self._videos: OrderedDict[str, tuple[cv2.VideoCapture, cv2.VideoCapture, int, int]] = OrderedDict()
@@ -135,8 +157,6 @@ class HuggAriaGaussianDataset(Dataset):
         frame_index = int(record["frame_index"])
         gaussian_frame_index = int(record["gaussian_frame_index"])
         target, gaussian = self._read_pair(sequence, frame_index, gaussian_frame_index)
-        if target.shape != gaussian.shape:
-            raise RuntimeError(f"RGB/Gaussian shape mismatch for {sequence}/{frame_index}")
         sam_mask = None
         if self.condition_variant == "sam_mask":
             sam_mask = self._sam_mask(sequence, frame_index, target.shape[:2])
@@ -145,27 +165,28 @@ class HuggAriaGaussianDataset(Dataset):
         target = cv2.resize(target, size, interpolation=cv2.INTER_AREA)
         gaussian = cv2.resize(gaussian, size, interpolation=cv2.INTER_AREA)
         gaussian_foreground = gaussian.max(axis=2) > self.gaussian_threshold
-        if sam_mask is None:
-            mask = gaussian_foreground
-        else:
+        if sam_mask is not None:
             sam_mask = cv2.resize(
                 sam_mask.astype(np.uint8), size, interpolation=cv2.INTER_NEAREST
             ).astype(bool)
-            mask = gaussian_foreground & sam_mask
+        overlay_mask, loss_mask = overlay_and_loss_masks(
+            gaussian_foreground, sam_mask, self.loss_mask_source
+        )
         target = target.astype(np.float32) / 255.0
         gaussian = gaussian.astype(np.float32) / 255.0
         condition = target.copy()
         alpha = self.gaussian_opacity
-        condition[mask] = (
-            (1.0 - alpha) * target[mask] + alpha * gaussian[mask]
+        condition[overlay_mask] = (
+            (1.0 - alpha) * target[overlay_mask] + alpha * gaussian[overlay_mask]
         )
-        mask_float = mask.astype(np.float32)
+        overlay_mask_float = overlay_mask.astype(np.float32)
+        loss_mask_float = loss_mask.astype(np.float32)
         result = {
             "target_rgb": torch.from_numpy(target.transpose(2, 0, 1) * 2.0 - 1.0),
             "mano_rgb": torch.from_numpy(gaussian.transpose(2, 0, 1) * 2.0 - 1.0),
-            "mano_mask": torch.from_numpy(mask_float[None]),
+            "mano_mask": torch.from_numpy(overlay_mask_float[None]),
             "condition_rgb": torch.from_numpy(condition.transpose(2, 0, 1) * 2.0 - 1.0),
-            "edit_mask": torch.from_numpy(mask_float[None]),
+            "edit_mask": torch.from_numpy(loss_mask_float[None]),
             "metadata": {
                 "sequence_id": sequence,
                 "frame_id": frame_index,
@@ -177,18 +198,20 @@ class HuggAriaGaussianDataset(Dataset):
                 "original_image_size": target.shape[:2],
                 "condition_variant": self.condition_variant,
                 "overlay_logic": (
-                    "gaussian_foreground_intersect_sam"
+                    f"{self.render_kind}_foreground_intersect_sam"
                     if self.condition_variant == "sam_mask"
-                    else "gaussian_foreground"
+                    else f"{self.render_kind}_foreground"
                 ),
+                "render_kind": self.render_kind,
+                "loss_mask_source": self.loss_mask_source,
             },
         }
         if self.include_numpy:
             result.update({
                 "target_rgb_np": target,
                 "mano_rgb_np": gaussian,
-                "mano_mask_np": mask_float,
+                "mano_mask_np": overlay_mask_float,
                 "condition_rgb_np": condition,
-                "edit_mask_np": mask_float,
+                "edit_mask_np": loss_mask_float,
             })
         return result

@@ -159,3 +159,68 @@ Use SSH or VS Code port forwarding for port 7860. The page only exposes the
 frozen 136 in-domain frames and shows condition input, raw model output, and
 ground truth. It defaults to the newest complete checkpoint, including
 `controlnet_final.pt`.
+
+## Gaussian versus MANO render ablation
+
+The render-source ablation must start both branches from the same unconditioned
+initialization. Do not initialize the MANO branch from a checkpoint that has
+already learned Gaussian conditions. Both committed configs use seed 7 and
+create ControlNet from the same frozen SD 1.5 UNet. They differ only in render
+root, render kind, and output directory.
+
+Render the MANO prior once. The output includes every source frame; filtered
+or MANO-out-of-view frames are black so frame indices never shift. Each sequence
+also records `mano_availability.csv`. Rendering uses the same per-frame LINEAR
+camera calibration, headset trajectory, MANO poses, and licensed MANO model
+files as SAM prompting:
+
+```bash
+python render_hugg_aria_mano_aligned.py \
+  --workers 24 --torch-threads 1 --codec libx264
+
+python build_hugg_aria_render_ablation_manifest.py
+```
+
+The second command intersects the original filtered manifest with MANO raster
+availability. Both branches therefore train on the exact same common frames;
+an empty MANO render is never allowed to turn into an unchanged condition that
+already equals the target. It also keeps one deterministic seen-eval frame per
+sequence, replacing the old choice with the nearest common frame when needed.
+The condition overlay remains `render foreground AND SAM`, while
+`loss_mask_source=sam` makes the weight-10 loss region identical between
+Gaussian and MANO regardless of their different silhouette coverage.
+
+The paired five-epoch run uses eight GPUs, 32 images/GPU (global batch 256),
+BF16, hand weight 10, 150-frame chunk shuffle, AdamW with weight decay 0.01, LR
+`5e-6`, 100 warmup steps, and then a constant LR. Equal 500-step continuation
+pilots at `5e-6`, `1e-5`, and `2e-5` selected `5e-6`: it had the lowest fixed
+validation total, hand-region, and background-region losses. Unlike cosine, the
+constant-with-warmup schedule does not decay the LR to zero during this short
+comparison.
+
+```bash
+# Select LR from equal 500-step Gaussian pilots at 5e-6, 1e-5 and 2e-5.
+./run_hugg_lr_sweep.sh
+```
+
+Run the paired experiment after selecting the LR from fixed validation metrics
+and images:
+
+```bash
+accelerate launch --num_processes 8 --num_machines 1 \
+  --mixed_precision bf16 --dynamo_backend no \
+  train_hand_restorer.py \
+  --config configs/hand_restoration/hugg_aria_ablation_gaussian_weight10_lr5e6_constant_5epochs.json
+
+accelerate launch --num_processes 8 --num_machines 1 \
+  --mixed_precision bf16 --dynamo_backend no \
+  train_hand_restorer.py \
+  --config configs/hand_restoration/hugg_aria_ablation_mano_weight10_lr5e6_constant_5epochs.json
+```
+
+Run both commands without `--resume`. The common-manifest summary records the
+final sample count; both runs use those exact records, 136 in-domain sequences,
+chunk order, random seed, optimizer, batch geometry, SAM loss mask, and loss.
+Compare validation hand-region loss, background-region loss, total loss, and
+raw inference output on the same seeds. A lower training loss alone is not
+evidence that one render prior is better.

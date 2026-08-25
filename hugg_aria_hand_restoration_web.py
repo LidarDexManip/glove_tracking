@@ -89,6 +89,8 @@ class HuggAriaInferenceApp:
             condition_variant=data.get("condition_variant", "sam_mask"),
             gaussian_opacity=data.get("gaussian_opacity", 1.0),
             gaussian_threshold=data.get("gaussian_threshold", 16),
+            render_kind=data.get("render_kind", "gaussian"),
+            loss_mask_source=data.get("loss_mask_source", "overlay"),
             include_numpy=True,
             max_open_sequences=data.get("max_open_sequences", 2),
         )
