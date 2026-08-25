@@ -113,10 +113,26 @@ accelerate launch --num_processes 8 --num_machines 1 \
   --resume outputs/hand_restoration/hugg_aria_aligned_sam_weighted_chunk5s_512_8gpu_batch256_epochs10/controlnet_final.pt
 ```
 
-The completed model has total step 31200. The committed six-epoch continuation
-config documents recovery from `controlnet_step021840.pt` after an interrupted
-run. These checkpoints save ControlNet weights and global step, but not
-optimizer or scheduler state, so recovery is a warm start.
+The completed model has total step 31200. The historical six-epoch
+continuation config documents the earlier weights-only recovery from
+`controlnet_step021840.pt`; that run was necessarily a warm start.
+
+New runs also save `trainer_state_stepNNNNNN/` directories containing the
+ControlNet, AdamW moments, exact cosine scheduler/scaler state, per-rank RNG,
+loss EMA, epoch and next batch. Two recent full states are retained. Continue
+an interrupted run with the original config and world size:
+
+```bash
+accelerate launch --num_processes 8 --num_machines 1 \
+  --mixed_precision bf16 --dynamo_backend no \
+  train_hand_restorer.py \
+  --config configs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs.json \
+  --resume outputs/hand_restoration/hugg_aria_aligned_sam_weight10_chunk5s_512_8gpu_batch256_resume10epochs/trainer_state_stepNNNNNN
+```
+
+Directory resume continues toward the original target rather than adding more
+epochs. A `.pt` resume remains available when a deliberate new optimizer and
+learning-rate schedule are desired.
 
 ## Curves and browser inference
 

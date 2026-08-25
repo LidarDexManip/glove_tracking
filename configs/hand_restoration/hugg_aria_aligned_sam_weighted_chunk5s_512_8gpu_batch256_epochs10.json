@@ -45,6 +45,8 @@
     "csv_log_every": 1,
     "loss_ema_decay": 0.98,
     "checkpoint_every": "epoch",
+    "save_full_state": true,
+    "full_state_keep_last": 2,
     "validation_every": "epoch",
     "validation_seed": 7,
     "use_wandb": false

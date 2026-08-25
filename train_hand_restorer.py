@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import importlib.metadata
 import json
 import math
@@ -37,6 +38,175 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+
+
+def stable_hash(value: object) -> str:
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), default=str
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def dataset_fingerprint(dataset) -> str:
+    digest = hashlib.sha256(type(dataset).__name__.encode("utf-8"))
+    if isinstance(dataset, Subset):
+        digest.update(dataset_fingerprint(dataset.dataset).encode("ascii"))
+        digest.update(stable_hash(list(dataset.indices)).encode("ascii"))
+    elif hasattr(dataset, "samples"):
+        for record in dataset.samples:
+            digest.update(stable_hash(record).encode("ascii"))
+    else:
+        digest.update(str(len(dataset)).encode("ascii"))
+    return digest.hexdigest()
+
+
+def next_training_position(
+    epoch: int, batch_in_epoch: int, batches_per_epoch: int
+) -> tuple[int, int]:
+    next_batch = int(batch_in_epoch) + 1
+    if next_batch >= int(batches_per_epoch):
+        return int(epoch) + 1, 0
+    return int(epoch), next_batch
+
+
+class TrainingProgress:
+    """Loop state stored alongside Accelerate model/optimizer/RNG state."""
+
+    format_version = 1
+
+    def __init__(
+        self,
+        *,
+        config_hash: str,
+        dataset_hash: str,
+        target_steps: int,
+        optimizer_steps_per_epoch: int,
+        batches_per_epoch: int,
+        num_processes: int,
+        total_step_offset: int,
+    ) -> None:
+        self.config_hash = config_hash
+        self.dataset_hash = dataset_hash
+        self.target_steps = int(target_steps)
+        self.optimizer_steps_per_epoch = int(optimizer_steps_per_epoch)
+        self.batches_per_epoch = int(batches_per_epoch)
+        self.num_processes = int(num_processes)
+        self.total_step_offset = int(total_step_offset)
+        self.global_step = 0
+        self.epoch = 0
+        self.next_batch_in_epoch = 0
+        self.samples_seen = 0
+        self.loss_ema: float | None = None
+        self.train_generator_state = torch.Generator().get_state()
+
+    def state_dict(self) -> dict:
+        return {
+            "format_version": self.format_version,
+            "config_hash": self.config_hash,
+            "dataset_hash": self.dataset_hash,
+            "target_steps": self.target_steps,
+            "optimizer_steps_per_epoch": self.optimizer_steps_per_epoch,
+            "batches_per_epoch": self.batches_per_epoch,
+            "num_processes": self.num_processes,
+            "total_step_offset": self.total_step_offset,
+            "global_step": self.global_step,
+            "epoch": self.epoch,
+            "next_batch_in_epoch": self.next_batch_in_epoch,
+            "samples_seen": self.samples_seen,
+            "loss_ema": self.loss_ema,
+            "train_generator_state": self.train_generator_state,
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        if int(state.get("format_version", 0)) != self.format_version:
+            raise RuntimeError(
+                f"Unsupported training progress format: "
+                f"{state.get('format_version')}"
+            )
+        for key in (
+            "config_hash", "dataset_hash", "target_steps",
+            "optimizer_steps_per_epoch", "batches_per_epoch", "num_processes",
+            "total_step_offset", "global_step", "epoch",
+            "next_batch_in_epoch", "samples_seen", "loss_ema",
+            "train_generator_state",
+        ):
+            setattr(self, key, state[key])
+
+    def validate(
+        self,
+        *,
+        config_hash: str,
+        dataset_hash: str,
+        target_steps: int,
+        optimizer_steps_per_epoch: int,
+        batches_per_epoch: int,
+        num_processes: int,
+    ) -> None:
+        expected = {
+            "config_hash": config_hash,
+            "dataset_hash": dataset_hash,
+            "target_steps": int(target_steps),
+            "optimizer_steps_per_epoch": int(optimizer_steps_per_epoch),
+            "batches_per_epoch": int(batches_per_epoch),
+            "num_processes": int(num_processes),
+        }
+        mismatches = {
+            key: (getattr(self, key), value)
+            for key, value in expected.items()
+            if getattr(self, key) != value
+        }
+        if mismatches:
+            raise RuntimeError(
+                "Exact resume requires the original config, dataset, batch "
+                f"geometry, and world size; mismatches={mismatches}"
+            )
+        if not 0 <= int(self.global_step) <= int(self.target_steps):
+            raise RuntimeError(
+                f"Invalid saved global_step={self.global_step} for "
+                f"target_steps={self.target_steps}"
+            )
+        if not 0 <= int(self.next_batch_in_epoch) < int(self.batches_per_epoch):
+            raise RuntimeError(
+                f"Invalid next_batch_in_epoch={self.next_batch_in_epoch}"
+            )
+
+
+_TRAINER_STATE_RE = re.compile(r"^trainer_state_step(\d+)$")
+
+
+def save_exact_training_state(
+    accelerator,
+    output: Path,
+    progress: TrainingProgress,
+    total_step: int,
+    keep_last: int,
+) -> Path:
+    """Atomically save Accelerate state and retain the newest checkpoints."""
+
+    if keep_last <= 0:
+        raise ValueError("full_state_keep_last must be positive")
+    name = f"trainer_state_step{int(total_step):06d}"
+    final = output / name
+    partial = output / f".{name}.incomplete"
+    if accelerator.is_main_process:
+        shutil.rmtree(partial, ignore_errors=True)
+        partial.mkdir(parents=True)
+    accelerator.wait_for_everyone()
+    accelerator.save_state(str(partial))
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        shutil.rmtree(final, ignore_errors=True)
+        partial.replace(final)
+        states = []
+        for path in output.iterdir():
+            match = _TRAINER_STATE_RE.fullmatch(path.name)
+            if match and path.is_dir():
+                states.append((int(match.group(1)), path))
+        for _, stale in sorted(states)[:-keep_last]:
+            shutil.rmtree(stale)
+        print(f"Saved exact trainer state to {final}")
+    accelerator.wait_for_everyone()
+    return final
 
 
 def format_batch_metadata(batch: dict, key: str) -> str:
@@ -206,7 +376,13 @@ def validation_loss(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--resume", type=Path, default=None, help="ControlNet .pt checkpoint from this script.")
+    parser.add_argument(
+        "--resume", type=Path, default=None,
+        help=(
+            "ControlNet .pt for a weights-only warm start, or a "
+            "trainer_state_stepNNNNNN directory for exact continuation."
+        ),
+    )
     args = parser.parse_args()
     from accelerate import Accelerator
     from diffusers.optimization import get_scheduler
@@ -287,11 +463,16 @@ def main() -> None:
     restorer.vae.to(device)
     restorer.text_encoder.to(device)
     restorer.unet.to(device)
-    if args.resume:
+    exact_resume = bool(args.resume and args.resume.is_dir())
+    if args.resume and not args.resume.exists():
+        raise FileNotFoundError(args.resume)
+    if args.resume and not exact_resume:
         restorer.load_controlnet(args.resume)
     resume_step = 0
-    if args.resume:
-        match = re.search(r"(?:controlnet_step|global_step)(\d+)$", args.resume.stem)
+    if args.resume and not exact_resume:
+        match = re.search(
+            r"(?:controlnet_step|global_step)(\d+)$", args.resume.stem
+        )
         if match:
             resume_step = int(match.group(1))
         else:
@@ -305,6 +486,40 @@ def main() -> None:
         restorer.controlnet, optimizer, train_loader, scheduler = accelerator.prepare(restorer.controlnet, optimizer, train_loader, scheduler)
     else:
         restorer.controlnet, optimizer, train_loader, val_loader, scheduler = accelerator.prepare(restorer.controlnet, optimizer, train_loader, val_loader, scheduler)
+
+    expected_config_hash = stable_hash(config)
+    expected_dataset_hash = dataset_fingerprint(train_dataset)
+    batches_per_epoch = len(train_loader)
+    progress = TrainingProgress(
+        config_hash=expected_config_hash,
+        dataset_hash=expected_dataset_hash,
+        target_steps=steps,
+        optimizer_steps_per_epoch=optimizer_steps_per_epoch,
+        batches_per_epoch=batches_per_epoch,
+        num_processes=accelerator.num_processes,
+        total_step_offset=resume_step,
+    )
+    accelerator.register_for_checkpointing(progress)
+    if exact_resume:
+        accelerator.load_state(str(args.resume.resolve()))
+        progress.validate(
+            config_hash=expected_config_hash,
+            dataset_hash=expected_dataset_hash,
+            target_steps=steps,
+            optimizer_steps_per_epoch=optimizer_steps_per_epoch,
+            batches_per_epoch=batches_per_epoch,
+            num_processes=accelerator.num_processes,
+        )
+        train_generator.set_state(progress.train_generator_state)
+        resume_step = int(progress.total_step_offset)
+        if accelerator.is_main_process:
+            print(
+                f"Exact resume from {args.resume}: "
+                f"run_step={progress.global_step}/{steps} "
+                f"total_step={resume_step + progress.global_step} "
+                f"epoch={progress.epoch} "
+                f"next_batch={progress.next_batch_in_epoch}"
+            )
     restorer.controlnet.train()
 
     log_file = None
@@ -329,14 +544,21 @@ def main() -> None:
             log_writer.writeheader()
     hand_loss_weight = float(train_cfg.get("hand_loss_weight", 1.0))
 
-    global_step = 0
-    samples_seen = 0
-    epoch = 0
-    loss_ema = None
+    global_step = int(progress.global_step) if exact_resume else 0
+    samples_seen = int(progress.samples_seen) if exact_resume else 0
+    epoch = int(progress.epoch) if exact_resume else 0
+    resume_batch_in_epoch = (
+        int(progress.next_batch_in_epoch) if exact_resume else 0
+    )
+    loss_ema = progress.loss_ema if exact_resume else None
     ema_decay = float(train_cfg.get("loss_ema_decay", 0.98))
     csv_every = max(1, int(train_cfg.get("csv_log_every", 1)))
     checkpoint_setting = train_cfg.get("checkpoint_every", 250)
     checkpoint_every = resolve_period(checkpoint_setting, optimizer_steps_per_epoch)
+    save_full_state = bool(train_cfg.get("save_full_state", True))
+    full_state_keep_last = int(train_cfg.get("full_state_keep_last", 2))
+    if full_state_keep_last <= 0:
+        raise ValueError("training.full_state_keep_last must be positive")
     validation_setting = train_cfg.get("validation_every", checkpoint_setting)
     validation_every = resolve_period(validation_setting, optimizer_steps_per_epoch)
     validation_seed = int(train_cfg.get("validation_seed", seed))
@@ -348,7 +570,12 @@ def main() -> None:
     optimizer.zero_grad(set_to_none=True)
     try:
         while global_step < steps:
+            if train_sampler is not None:
+                train_sampler.set_epoch(epoch)
+            skipped_batches = resume_batch_in_epoch
             for batch_in_epoch, batch in enumerate(train_loader):
+                if batch_in_epoch < skipped_batches:
+                    continue
                 samples_seen += int(batch["target_rgb"].shape[0]) * accelerator.num_processes
                 grad_norm_value = float("nan")
                 with accelerator.accumulate(restorer.controlnet):
@@ -432,9 +659,25 @@ def main() -> None:
                     accelerator.wait_for_everyone()
                 if accelerator.is_main_process and checkpoint_due:
                     torch.save({"config": restorer.config.__dict__, "global_step": total_step, "state_dict": accelerator.unwrap_model(restorer.controlnet).state_dict()}, output / f"controlnet_step{total_step:06d}.pt")
+                if checkpoint_due and save_full_state:
+                    next_epoch, next_batch = next_training_position(
+                        epoch, batch_in_epoch, batches_per_epoch
+                    )
+                    progress.total_step_offset = resume_step
+                    progress.global_step = global_step
+                    progress.epoch = next_epoch
+                    progress.next_batch_in_epoch = next_batch
+                    progress.samples_seen = samples_seen
+                    progress.loss_ema = loss_ema
+                    progress.train_generator_state = train_generator.get_state()
+                    save_exact_training_state(
+                        accelerator, output, progress, total_step,
+                        full_state_keep_last,
+                    )
                 if global_step >= steps:
                     break
             epoch += 1
+            resume_batch_in_epoch = 0
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
             torch.save({"config": restorer.config.__dict__, "global_step": resume_step + global_step, "state_dict": accelerator.unwrap_model(restorer.controlnet).state_dict()}, output / "controlnet_final.pt")
