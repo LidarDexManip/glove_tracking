@@ -12,11 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = ROOT / "configs/hand_restoration"
 GAUSSIAN_CONFIG = (
     CONFIG_DIR
-    / "hugg_aria_ablation_gaussian_weight10_lr5e6_constant_5epochs.json"
+    / "hugg_aria_ablation_gaussian_manoloss_weight10_lr5e6_constant_5epochs.json"
 )
 MANO_CONFIG = (
     CONFIG_DIR
-    / "hugg_aria_ablation_mano_weight10_lr5e6_constant_5epochs.json"
+    / "hugg_aria_ablation_mano_manoloss_weight10_lr5e6_constant_5epochs.json"
 )
 
 
@@ -37,7 +37,9 @@ def test_overlay_ablation_configs_only_change_render_source_and_output() -> None
     assert mano["data"]["render_kind"] == "mano"
     assert gaussian["data"]["gaussian_root"] != mano["data"]["gaussian_root"]
     assert gaussian["training"]["output_dir"] != mano["training"]["output_dir"]
-    assert gaussian["data"]["loss_mask_source"] == "sam"
+    assert gaussian["data"]["loss_mask_source"] == "mano"
+    assert gaussian["data"]["loss_mask_root"] == "data/HUGG_ARIA_MANO_ALIGNED"
+    assert gaussian["data"]["loss_mask_root"] == mano["data"]["loss_mask_root"]
     assert "ablation_common" in gaussian["data"]["train_manifest"]
 
 
@@ -56,19 +58,22 @@ def test_tuned_ablation_training_geometry() -> None:
     assert training["save_full_state"] is True
 
 
-def test_sam_loss_mask_is_independent_of_render_coverage() -> None:
+def test_mano_loss_mask_is_independent_of_render_and_sam_coverage() -> None:
     sam = np.asarray([[True, True], [False, True]])
     gaussian = np.asarray([[True, False], [False, True]])
-    mano = np.asarray([[False, True], [False, True]])
+    mano_render = np.asarray([[False, True], [False, True]])
+    mano_loss_region = np.asarray([[True, False], [True, False]])
 
     gaussian_overlay, gaussian_loss = overlay_and_loss_masks(
-        gaussian, sam, "sam"
+        gaussian, sam, "mano", mano_mask=mano_loss_region
     )
-    mano_overlay, mano_loss = overlay_and_loss_masks(mano, sam, "sam")
+    mano_overlay, mano_loss = overlay_and_loss_masks(
+        mano_render, sam, "mano", mano_mask=mano_loss_region
+    )
 
     assert not np.array_equal(gaussian_overlay, mano_overlay)
-    assert np.array_equal(gaussian_loss, sam)
-    assert np.array_equal(mano_loss, sam)
+    assert np.array_equal(gaussian_loss, mano_loss_region)
+    assert np.array_equal(mano_loss, mano_loss_region)
     legacy_overlay, legacy_loss = overlay_and_loss_masks(
         gaussian, sam, "overlay"
     )

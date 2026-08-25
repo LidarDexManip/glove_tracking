@@ -186,9 +186,12 @@ availability. Both branches therefore train on the exact same common frames;
 an empty MANO render is never allowed to turn into an unchanged condition that
 already equals the target. It also keeps one deterministic seen-eval frame per
 sequence, replacing the old choice with the nearest common frame when needed.
-The condition overlay remains `render foreground AND SAM`, while
-`loss_mask_source=sam` makes the weight-10 loss region identical between
-Gaussian and MANO regardless of their different silhouette coverage.
+The condition overlay remains `render foreground AND SAM`. The weight-10 loss
+region is instead the foreground rasterized from the aligned MANO video for
+both branches (`loss_mask_source=mano`). The Gaussian branch therefore reads
+MANO only to construct its loss mask; MANO pixels are not placed in its
+condition. This keeps the supervised hand geometry identical without allowing
+SAM errors or the two condition silhouettes to change the objective.
 
 The paired five-epoch run uses eight GPUs, 32 images/GPU (global batch 256),
 BF16, hand weight 10, 150-frame chunk shuffle, AdamW with weight decay 0.01, LR
@@ -210,17 +213,20 @@ and images:
 accelerate launch --num_processes 8 --num_machines 1 \
   --mixed_precision bf16 --dynamo_backend no \
   train_hand_restorer.py \
-  --config configs/hand_restoration/hugg_aria_ablation_gaussian_weight10_lr5e6_constant_5epochs.json
+  --config configs/hand_restoration/hugg_aria_ablation_gaussian_manoloss_weight10_lr5e6_constant_5epochs.json
 
 accelerate launch --num_processes 8 --num_machines 1 \
   --mixed_precision bf16 --dynamo_backend no \
   train_hand_restorer.py \
-  --config configs/hand_restoration/hugg_aria_ablation_mano_weight10_lr5e6_constant_5epochs.json
+  --config configs/hand_restoration/hugg_aria_ablation_mano_manoloss_weight10_lr5e6_constant_5epochs.json
 ```
 
 Run both commands without `--resume`. The common-manifest summary records the
 final sample count; both runs use those exact records, 136 in-domain sequences,
-chunk order, random seed, optimizer, batch geometry, SAM loss mask, and loss.
+chunk order, random seed, optimizer, batch geometry, MANO loss mask, and loss.
 Compare validation hand-region loss, background-region loss, total loss, and
 raw inference output on the same seeds. A lower training loss alone is not
 evidence that one render prior is better.
+
+The older configs without `manoloss` are retained only to reproduce the first
+completed pair, whose weight-10 region was based on SAM rather than MANO.

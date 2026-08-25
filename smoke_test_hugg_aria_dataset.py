@@ -36,6 +36,12 @@ def dataset(config: dict, manifest: Path, condition_variant: str) -> HuggAriaGau
         gaussian_threshold=data.get("gaussian_threshold", 16),
         render_kind=data.get("render_kind", "gaussian"),
         loss_mask_source=data.get("loss_mask_source", "overlay"),
+        loss_mask_root=(
+            ROOT / data["loss_mask_root"]
+            if data.get("loss_mask_root")
+            else None
+        ),
+        loss_mask_threshold=data.get("loss_mask_threshold"),
         include_numpy=False,
         max_open_sequences=1,
     )
