@@ -44,9 +44,6 @@ class FramePlan:
     mano_pose_qa_available: bool
     hand_visible: bool
     good_exposure: bool
-    gaussian_valid: bool
-    gaussian_left_valid: bool
-    gaussian_right_valid: bool
     training_candidate: bool
     training_filter_reason: str
 
@@ -111,17 +108,6 @@ def closest_device_time(timestamp: int, timecodes: list[int], device_times: list
     choices = [index for index in (position - 1, position) if 0 <= index < len(timecodes)]
     best = min(choices, key=lambda index: abs(timecodes[index] - timestamp))
     return device_times[best]
-
-
-def load_gaussian_mapping(path: Path) -> dict[int, tuple[bool, bool]]:
-    result = {}
-    with path.open(newline="") as handle:
-        for row in csv.DictReader(handle):
-            result[int(row["source_frame_index"])] = (
-                row["left_valid"].strip().lower() == "true",
-                row["right_valid"].strip().lower() == "true",
-            )
-    return result
 
 
 def pose_collection(hand_provider, timestamp: int):
@@ -263,7 +249,7 @@ class RawBoxProjector:
 
 def build_frame_plan(timestamps: list[int], calibrations: list[dict], masks_dir: Path,
                      raw_boxes_path: Path, support_mps_dir: Path,
-                     timecode_mapping_path: Path, gaussian_mapping_path: Path,
+                     timecode_mapping_path: Path,
                      hand_provider, headset_provider, padding: float,
                      min_side: float, min_area: float) -> list[FramePlan]:
     qa = load_bool_mask(masks_dir / "mask_qa_pass.csv")
@@ -271,7 +257,6 @@ def build_frame_plan(timestamps: list[int], calibrations: list[dict], masks_dir:
     hand_visible = load_bool_mask(masks_dir / "mask_hand_visible.csv")
     good_exposure = load_bool_mask(masks_dir / "mask_good_exposure.csv")
     raw_boxes = load_raw_boxes(raw_boxes_path)
-    gaussian = load_gaussian_mapping(gaussian_mapping_path)
     projector = RawBoxProjector(
         support_mps_dir, timecode_mapping_path,
         int(calibrations[0]["image_width"]), int(calibrations[0]["image_height"]),
@@ -282,7 +267,6 @@ def build_frame_plan(timestamps: list[int], calibrations: list[dict], masks_dir:
         pose_qa = mano_pose_qa.get(timestamp, True)
         visible = hand_visible.get(timestamp, True)
         exposure = good_exposure.get(timestamp, True)
-        gaussian_left, gaussian_right = gaussian.get(frame_index, (False, False))
         collection = pose_collection(hand_provider, timestamp)
         poses = {} if collection is None else collection.poses
         t_camera_world = world_to_camera(calibration, headset_provider, timestamp)
@@ -312,10 +296,7 @@ def build_frame_plan(timestamps: list[int], calibrations: list[dict], masks_dir:
         active = 0
         if visible:
             active = LEFT_BIT * int(LEFT in prompt_items) | RIGHT_BIT * int(RIGHT in prompt_items)
-        gaussian_valid = gaussian_left or gaussian_right
         reasons = []
-        if not gaussian_valid:
-            reasons.append("gaussian_invalid")
         if not qa_pass:
             reasons.append("qa_fail")
         if not pose_qa:
@@ -327,8 +308,7 @@ def build_frame_plan(timestamps: list[int], calibrations: list[dict], masks_dir:
         plans.append(FramePlan(
             frame_index, timestamp, active,
             prompt_items.get(LEFT), prompt_items.get(RIGHT),
-            qa_pass, pose_qa, visible, exposure, gaussian_valid,
-            gaussian_left, gaussian_right, not reasons,
+            qa_pass, pose_qa, visible, exposure, not reasons,
             "ok" if not reasons else "+".join(reasons),
         ))
     return plans

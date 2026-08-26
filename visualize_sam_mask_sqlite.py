@@ -14,7 +14,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATASET = ROOT / "data/HUGG_ARIA_PINHOLE"
-DEFAULT_MASKS = ROOT / "outputs/sam2_hugg_aria_masks"
+DEFAULT_MASKS = ROOT / "outputs/sam2_hugg_aria_masks_v3_pilot"
 
 
 def arguments() -> argparse.Namespace:
@@ -84,16 +84,12 @@ def overlay_frame(
                 ),
                 white,
             ),
-            (
-                "gaussian: L={} R={}  |  prompt: L={} R={}".format(
-                    training_info["gaussian_left_valid"],
-                    training_info["gaussian_right_valid"],
-                    training_info["left_prompt_source"] or "none",
-                    training_info["right_prompt_source"] or "none",
-                ),
-                white,
-            ),
         ])
+        prompt_text = "prompt: L={} R={}".format(
+            training_info["left_prompt_source"] or "none",
+            training_info["right_prompt_source"] or "none",
+        )
+        lines.append((prompt_text, white))
     elif chunk_status == "no_prompt":
         lines.append(("NO MANO PROMPT - MASK UNAVAILABLE", (55, 55, 255)))
     elif chunk_status.startswith("filtered_") or chunk_status == "pending":
@@ -164,12 +160,12 @@ def main() -> None:
                 break
             training_info = None
             if is_v3:
-                fields = (
+                fields = [
                     "sam_complete", "training_candidate", "training_eligible",
                     "training_filter_reason", "qa_pass", "mano_pose_qa_available",
-                    "hand_visible", "good_exposure", "gaussian_left_valid",
-                    "gaussian_right_valid", "left_prompt_source", "right_prompt_source",
-                )
+                    "hand_visible", "good_exposure", "left_prompt_source",
+                    "right_prompt_source",
+                ]
                 query = (
                     "SELECT status,labels_zlib," + ",".join(fields)
                     + " FROM frames WHERE frame_index=?"

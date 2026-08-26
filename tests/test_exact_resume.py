@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import random
 
 import numpy as np
@@ -12,7 +13,9 @@ from hand_restoration.samplers import TemporalChunkShuffleSampler
 from train_hand_restorer import (
     TrainingProgress,
     next_training_position,
+    resume_compatible_config_hash,
     save_exact_training_state,
+    save_run_metadata,
 )
 
 
@@ -133,6 +136,143 @@ def test_progress_validation_and_next_position() -> None:
         )
     assert next_training_position(3, 2, 5) == (3, 3)
     assert next_training_position(3, 4, 5) == (4, 0)
+
+
+def test_progress_allows_explicit_target_extension() -> None:
+    progress = TrainingProgress(
+        config_hash="config",
+        dataset_hash="dataset",
+        target_steps=10,
+        optimizer_steps_per_epoch=5,
+        batches_per_epoch=5,
+        num_processes=8,
+        total_step_offset=0,
+    )
+    progress.global_step = 10
+    progress.epoch = 2
+    progress.validate(
+        config_hash="config",
+        dataset_hash="dataset",
+        target_steps=20,
+        optimizer_steps_per_epoch=5,
+        batches_per_epoch=5,
+        num_processes=8,
+        allow_target_extension=True,
+    )
+    assert progress.target_steps == 20
+    assert progress.global_step == 10
+    assert progress.epoch == 2
+
+    with pytest.raises(RuntimeError, match="cannot shrink"):
+        progress.validate(
+            config_hash="config",
+            dataset_hash="dataset",
+            target_steps=5,
+            optimizer_steps_per_epoch=5,
+            batches_per_epoch=5,
+            num_processes=8,
+            allow_target_extension=True,
+        )
+
+
+def test_legacy_progress_migrates_with_verified_config() -> None:
+    original = TrainingProgress(
+        config_hash="legacy-full-config",
+        dataset_hash="dataset",
+        target_steps=10,
+        optimizer_steps_per_epoch=5,
+        batches_per_epoch=5,
+        num_processes=8,
+        total_step_offset=0,
+    )
+    legacy_state = original.state_dict()
+    legacy_state["format_version"] = 1
+
+    restored = TrainingProgress(
+        config_hash="new-compatible-config",
+        dataset_hash="dataset",
+        target_steps=20,
+        optimizer_steps_per_epoch=5,
+        batches_per_epoch=5,
+        num_processes=8,
+        total_step_offset=0,
+    )
+    restored.load_state_dict(legacy_state)
+    restored.validate(
+        config_hash="new-compatible-config",
+        dataset_hash="dataset",
+        target_steps=20,
+        optimizer_steps_per_epoch=5,
+        batches_per_epoch=5,
+        num_processes=8,
+        allow_target_extension=True,
+        legacy_config_compatible=True,
+    )
+    assert restored.format_version == 2
+    assert restored.loaded_format_version == 2
+    assert restored.config_hash == "new-compatible-config"
+    assert restored.target_steps == 20
+
+
+def test_resume_config_hash_ignores_only_training_horizon() -> None:
+    base = {
+        "data": {"train_manifest": "same"},
+        "training": {
+            "num_train_epochs": 10,
+            "learning_rate": 5e-6,
+            "lr_scheduler": "constant_with_warmup",
+        },
+    }
+    extended = copy.deepcopy(base)
+    extended["training"]["num_train_epochs"] = 20
+    assert (
+        resume_compatible_config_hash(base)
+        == resume_compatible_config_hash(extended)
+    )
+
+    extended["training"]["learning_rate"] = 1e-5
+    assert (
+        resume_compatible_config_hash(base)
+        != resume_compatible_config_hash(extended)
+    )
+
+
+def test_resume_metadata_preserves_initial_config(tmp_path) -> None:
+    config_v1 = tmp_path / "config_v1.json"
+    config_v2 = tmp_path / "config_v2.json"
+    split = tmp_path / "manifest_summary.json"
+    config_v1.write_text('{"training":{"num_train_epochs":10}}')
+    config_v2.write_text('{"training":{"num_train_epochs":20}}')
+    split.write_text('{"train_frames":3}')
+    output = tmp_path / "run"
+
+    save_run_metadata(
+        output,
+        config_v1,
+        split,
+        {"seed": 7},
+        train_size=3,
+        val_size=1,
+    )
+    resume_state = output / "trainer_state_step000003"
+    resume_state.mkdir()
+    save_run_metadata(
+        output,
+        config_v2,
+        split,
+        {"seed": 7},
+        train_size=3,
+        val_size=1,
+        resume_from=resume_state,
+    )
+
+    assert (output / "config.json").read_text() == config_v1.read_text()
+    resume_configs = list(output.glob("config_resume_*.json"))
+    assert len(resume_configs) == 1
+    assert resume_configs[0].read_text() == config_v2.read_text()
+    metadata = json.loads((output / "run_metadata.json").read_text())
+    assert metadata["saved_config"] == resume_configs[0].name
+    assert metadata["resume_from"] == str(resume_state.resolve())
 
 
 def test_temporal_sampler_resume_recreates_epoch_suffix() -> None:

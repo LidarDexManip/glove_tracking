@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 
 from hand_restoration.config import load_json_config
-from hand_restoration.hugg_aria_dataset import HuggAriaGaussianDataset
+from hand_restoration.hugg_aria_dataset import HuggAriaOverlayDataset
 
 
 ROOT = Path(__file__).resolve().parent
@@ -23,25 +23,30 @@ def arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def dataset(config: dict, manifest: Path, condition_variant: str) -> HuggAriaGaussianDataset:
+def dataset(
+    config: dict, manifest: Path, condition_variant: str
+) -> HuggAriaOverlayDataset:
     data = config["data"]
-    return HuggAriaGaussianDataset(
+    return HuggAriaOverlayDataset(
         manifest=manifest,
         pinhole_root=ROOT / data["pinhole_root"],
-        gaussian_root=ROOT / data["gaussian_root"],
+        render_root=ROOT / data["render_root"],
         mask_root=ROOT / data["mask_root"],
         output_size=data.get("output_size", 512),
         condition_variant=condition_variant,
-        gaussian_opacity=data.get("gaussian_opacity", 1.0),
-        gaussian_threshold=data.get("gaussian_threshold", 16),
+        render_opacity=data.get("render_opacity", 1.0),
         render_kind=data.get("render_kind", "gaussian"),
+        render_alpha_filename=data.get("render_alpha_filename", "alpha.mkv"),
+        alpha_threshold=data.get("alpha_threshold", 0.0),
         loss_mask_source=data.get("loss_mask_source", "overlay"),
         loss_mask_root=(
             ROOT / data["loss_mask_root"]
             if data.get("loss_mask_root")
             else None
         ),
-        loss_mask_threshold=data.get("loss_mask_threshold"),
+        loss_mask_alpha_filename=data.get(
+            "loss_mask_alpha_filename", "alpha.mkv"
+        ),
         include_numpy=False,
         max_open_sequences=1,
     )
@@ -72,16 +77,12 @@ def main() -> None:
         "status": "ok",
         "sequence": metadata["sequence_id"],
         "frame": metadata["frame_id"],
-        "gaussian_frame": metadata["gaussian_frame_id"],
-        "aligned_indices": metadata["frame_id"] == metadata["gaussian_frame_id"],
         "target_equal": True,
         "sam_edit_pixels": int(sample["edit_mask"].sum()),
         "direct_edit_pixels": int(direct["edit_mask"].sum()),
         "target_shape": list(sample["target_rgb"].shape),
         "hand_loss_weight": config["training"]["hand_loss_weight"],
     }
-    if not result["aligned_indices"]:
-        raise AssertionError("Aligned manifest has different source/Gaussian indices")
     print(json.dumps(result, indent=2))
 
 

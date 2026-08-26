@@ -22,7 +22,7 @@ MANO_CONFIG = (
 
 def normalized(config: dict) -> dict:
     result = json.loads(json.dumps(config))
-    result["data"].pop("gaussian_root")
+    result["data"].pop("render_root")
     result["data"].pop("render_kind")
     result["training"].pop("output_dir")
     return result
@@ -35,12 +35,16 @@ def test_overlay_ablation_configs_only_change_render_source_and_output() -> None
     assert normalized(gaussian) == normalized(mano)
     assert gaussian["data"]["render_kind"] == "gaussian"
     assert mano["data"]["render_kind"] == "mano"
-    assert gaussian["data"]["gaussian_root"] != mano["data"]["gaussian_root"]
+    assert gaussian["data"]["render_root"] != mano["data"]["render_root"]
     assert gaussian["training"]["output_dir"] != mano["training"]["output_dir"]
     assert gaussian["data"]["loss_mask_source"] == "mano"
     assert gaussian["data"]["loss_mask_root"] == "data/HUGG_ARIA_MANO_ALIGNED"
     assert gaussian["data"]["loss_mask_root"] == mano["data"]["loss_mask_root"]
-    assert "ablation_common" in gaussian["data"]["train_manifest"]
+    assert "hugg_aria_diffusion/train_manifest.jsonl" in (
+        gaussian["data"]["train_manifest"]
+    )
+    assert gaussian["data"]["render_alpha_filename"] == "alpha.mkv"
+    assert gaussian["data"]["loss_mask_alpha_filename"] == "alpha.mkv"
 
 
 def test_tuned_ablation_training_geometry() -> None:

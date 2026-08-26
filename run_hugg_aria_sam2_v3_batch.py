@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run resumable SAM2 v3 over the 136 Gaussian sequences on several GPUs."""
+"""Run resumable SAM2 v3 over the 136 frame-aligned pinhole sequences."""
 from __future__ import annotations
 
 import argparse
@@ -21,8 +21,6 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-root", type=Path,
                         default=ROOT / "data/HUGG_ARIA_PINHOLE")
-    parser.add_argument("--gaussian-root", type=Path,
-                        default=ROOT / "data/HUGG_ARIA_GAUSSIANS")
     parser.add_argument("--output-root", type=Path,
                         default=ROOT / "outputs/sam2_hugg_aria_masks_v3_pilot")
     parser.add_argument("--gpus", default="0,1,2,3,4,5,6")
@@ -42,8 +40,7 @@ def write_json_atomic(path: Path, value: object) -> None:
     temporary.replace(path)
 
 
-def valid_sequences(input_root: Path, gaussian_root: Path,
-                    selected: set[str]) -> list[Path]:
+def valid_sequences(input_root: Path, selected: set[str]) -> list[Path]:
     result = []
     for path in input_root.iterdir():
         if not path.is_dir() or not SEQUENCE_RE.fullmatch(path.name):
@@ -57,9 +54,7 @@ def valid_sequences(input_root: Path, gaussian_root: Path,
             path / "masks/mask_qa_pass.csv",
             path / "masks/mask_hand_visible.csv",
             path / "masks/mask_good_exposure.csv",
-            gaussian_root / path.name / ".g2h_complete.json",
             ROOT / "data/HUGG_ARIA_SAM_SUPPORT" / path.name / "box2d_hands.csv",
-            ROOT / "outputs/gaussian_frame_mapping" / f"{path.name}.csv",
         )
         if all(item.exists() for item in required):
             result.append(path)
@@ -69,7 +64,6 @@ def valid_sequences(input_root: Path, gaussian_root: Path,
 def main() -> None:
     args = arguments()
     input_root = args.input_root.resolve()
-    gaussian_root = args.gaussian_root.resolve()
     output_root = args.output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     logs = output_root / "_batch_logs"
@@ -77,7 +71,7 @@ def main() -> None:
     gpus = [item.strip() for item in args.gpus.split(",") if item.strip()]
     if not gpus:
         raise ValueError("--gpus must contain at least one GPU index")
-    sequences = valid_sequences(input_root, gaussian_root, set(args.sequence))
+    sequences = valid_sequences(input_root, set(args.sequence))
     if args.max_sequences:
         sequences = sequences[:args.max_sequences]
     if len(sequences) != 136 and not (args.sequence or args.max_sequences):
@@ -102,13 +96,12 @@ def main() -> None:
         "format_version": 3,
         "created_at": utc_now(),
         "input_root": str(input_root),
-        "gaussian_root": str(gaussian_root),
         "output_root": str(output_root),
         "sequence_count": len(sequences),
         "initially_complete": len(sequences) - len(pending),
         "gpus": gpus,
         "worker": "segment_hugg_aria_pinhole_v3.py",
-        "policy": "episode-start prompt; infer first; post-filter using Gaussian/QA/pose/visibility/exposure",
+        "policy": "episode-start prompt; infer first; post-filter using QA/pose/visibility/exposure; render-alpha filtering belongs to the final manifest",
         "sequences": [item.name for item in sequences],
     }
     write_json_atomic(output_root / "batch_manifest.json", manifest)

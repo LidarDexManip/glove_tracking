@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hand_restoration.config import load_json_config
-from hand_restoration.hugg_aria_dataset import HuggAriaGaussianDataset
+from hand_restoration.hugg_aria_dataset import HuggAriaOverlayDataset
 from hand_restoration.inference import (
     build_restorer,
     checkpoint_label,
@@ -44,12 +44,9 @@ def manifest_records(path: Path) -> list[dict]:
     ]
 
 
-def record_key(record: dict) -> tuple[str, int, int]:
-    return (
-        str(record["sequence_id"]),
-        int(record["frame_index"]),
-        int(record["gaussian_frame_index"]),
-    )
+def record_key(record: dict) -> tuple[str, int]:
+    return str(record["sequence_id"]), int(record["frame_index"])
+
 
 
 class HuggAriaInferenceApp:
@@ -80,23 +77,26 @@ class HuggAriaInferenceApp:
         if not seen_records:
             raise RuntimeError("The filtered seen-eval manifest is empty.")
 
-        self.dataset = HuggAriaGaussianDataset(
+        self.dataset = HuggAriaOverlayDataset(
             manifest=seen_manifest,
             pinhole_root=absolute(data["pinhole_root"]),
-            gaussian_root=absolute(data["gaussian_root"]),
+            render_root=absolute(data["render_root"]),
             mask_root=absolute(data["mask_root"]),
             output_size=data.get("output_size", 512),
             condition_variant=data.get("condition_variant", "sam_mask"),
-            gaussian_opacity=data.get("gaussian_opacity", 1.0),
-            gaussian_threshold=data.get("gaussian_threshold", 16),
+            render_opacity=data.get("render_opacity", 1.0),
             render_kind=data.get("render_kind", "gaussian"),
+            render_alpha_filename=data.get("render_alpha_filename", "alpha.mkv"),
+            alpha_threshold=data.get("alpha_threshold", 0.0),
             loss_mask_source=data.get("loss_mask_source", "overlay"),
             loss_mask_root=(
                 absolute(data["loss_mask_root"])
                 if data.get("loss_mask_root")
                 else None
             ),
-            loss_mask_threshold=data.get("loss_mask_threshold"),
+            loss_mask_alpha_filename=data.get(
+                "loss_mask_alpha_filename", "alpha.mkv"
+            ),
             include_numpy=True,
             max_open_sequences=data.get("max_open_sequences", 2),
         )
@@ -149,8 +149,8 @@ class HuggAriaInferenceApp:
         sample = self.sample(label)
         metadata = sample["metadata"]
         status = (
-            f"Eligible sample: `{metadata['sequence_id']}` frame "
-            f"{metadata['frame_id']} → Gaussian {metadata['gaussian_frame_id']}."
+            f"Eligible sample: {metadata['sequence_id']} "
+            f"frame {metadata['frame_id']}."
         )
         return (
             rgb_float_to_u8(sample["condition_rgb_np"]),

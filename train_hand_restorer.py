@@ -30,7 +30,7 @@ from hand_restoration.diffusion import (
 )
 from hand_restoration.hot3d_dataset import Hot3DSingleFrameDataset
 from hand_restoration.derived_dataset import DerivedHandRestorationDataset
-from hand_restoration.hugg_aria_dataset import HuggAriaGaussianDataset
+from hand_restoration.hugg_aria_dataset import HuggAriaOverlayDataset
 from hand_restoration.samplers import TemporalChunkShuffleSampler
 
 
@@ -45,6 +45,15 @@ def stable_hash(value: object) -> str:
         value, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def resume_compatible_config_hash(config: dict) -> str:
+    """Hash every training choice except the extendable step horizon."""
+    compatible = json.loads(json.dumps(config))
+    training = compatible.get("training", {})
+    training.pop("num_train_epochs", None)
+    training.pop("max_train_steps", None)
+    return stable_hash(compatible)
 
 
 def dataset_fingerprint(dataset) -> str:
@@ -72,7 +81,7 @@ def next_training_position(
 class TrainingProgress:
     """Loop state stored alongside Accelerate model/optimizer/RNG state."""
 
-    format_version = 1
+    format_version = 2
 
     def __init__(
         self,
@@ -98,6 +107,7 @@ class TrainingProgress:
         self.samples_seen = 0
         self.loss_ema: float | None = None
         self.train_generator_state = torch.Generator().get_state()
+        self.loaded_format_version = self.format_version
 
     def state_dict(self) -> dict:
         return {
@@ -118,11 +128,12 @@ class TrainingProgress:
         }
 
     def load_state_dict(self, state: dict) -> None:
-        if int(state.get("format_version", 0)) != self.format_version:
+        saved_format = int(state.get("format_version", 0))
+        if saved_format not in {1, self.format_version}:
             raise RuntimeError(
-                f"Unsupported training progress format: "
-                f"{state.get('format_version')}"
+                f"Unsupported training progress format: {saved_format}"
             )
+        self.loaded_format_version = saved_format
         for key in (
             "config_hash", "dataset_hash", "target_steps",
             "optimizer_steps_per_epoch", "batches_per_epoch", "num_processes",
@@ -141,34 +152,61 @@ class TrainingProgress:
         optimizer_steps_per_epoch: int,
         batches_per_epoch: int,
         num_processes: int,
+        allow_target_extension: bool = False,
+        legacy_config_compatible: bool = False,
     ) -> None:
         expected = {
             "config_hash": config_hash,
             "dataset_hash": dataset_hash,
-            "target_steps": int(target_steps),
             "optimizer_steps_per_epoch": int(optimizer_steps_per_epoch),
             "batches_per_epoch": int(batches_per_epoch),
             "num_processes": int(num_processes),
         }
-        mismatches = {
-            key: (getattr(self, key), value)
-            for key, value in expected.items()
-            if getattr(self, key) != value
-        }
+        mismatches = {}
+        for key, value in expected.items():
+            saved = getattr(self, key)
+            if saved == value:
+                continue
+            if (
+                key == "config_hash"
+                and self.loaded_format_version == 1
+                and legacy_config_compatible
+            ):
+                continue
+            mismatches[key] = (saved, value)
         if mismatches:
             raise RuntimeError(
-                "Exact resume requires the original config, dataset, batch "
-                f"geometry, and world size; mismatches={mismatches}"
+                "Exact resume requires the original config (apart from its "
+                "step horizon), dataset, batch geometry, and world size; "
+                f"mismatches={mismatches}"
             )
-        if not 0 <= int(self.global_step) <= int(self.target_steps):
+
+        new_target = int(target_steps)
+        old_target = int(self.target_steps)
+        if new_target < old_target:
+            raise RuntimeError(
+                f"Exact resume cannot shrink target steps: "
+                f"{old_target} -> {new_target}"
+            )
+        if new_target > old_target and not allow_target_extension:
+            raise RuntimeError(
+                f"Target extension {old_target} -> {new_target} is disabled. "
+                "It is only safe for a horizon-independent LR scheduler and "
+                "must be explicitly enabled."
+            )
+        if not 0 <= int(self.global_step) <= new_target:
             raise RuntimeError(
                 f"Invalid saved global_step={self.global_step} for "
-                f"target_steps={self.target_steps}"
+                f"target_steps={new_target}"
             )
         if not 0 <= int(self.next_batch_in_epoch) < int(self.batches_per_epoch):
             raise RuntimeError(
                 f"Invalid next_batch_in_epoch={self.next_batch_in_epoch}"
             )
+        self.config_hash = config_hash
+        self.target_steps = new_target
+        self.loaded_format_version = self.format_version
+
 
 
 _TRAINER_STATE_RE = re.compile(r"^trainer_state_step(\d+)$")
@@ -232,6 +270,7 @@ def make_dataset(config: dict, clip_tars: list[str], include_numpy: bool = False
         max_frames_per_clip=data.get("max_frames_per_clip"),
         condition=ConditionConfig(**config.get("condition", {})),
         seed=config.get("seed", 0),
+        loss_mask_alpha_filename=data.get("loss_mask_alpha_filename", "alpha.mkv"),
         include_numpy=include_numpy,
         require_mano_in_frame=data.get("require_mano_in_frame", False),
         min_visible_mano_vertices=data.get("min_visible_mano_vertices", 1),
@@ -250,26 +289,31 @@ def make_derived_dataset(config: dict, manifest: Path, include_numpy: bool = Fal
     )
 
 
-def make_hugg_aria_dataset(config: dict, manifest: Path, include_numpy: bool = False) -> HuggAriaGaussianDataset:
+def make_hugg_aria_dataset(
+    config: dict, manifest: Path, include_numpy: bool = False
+) -> HuggAriaOverlayDataset:
     data = config["data"]
     root = Path(__file__).resolve().parent
-    return HuggAriaGaussianDataset(
+    return HuggAriaOverlayDataset(
         manifest=manifest,
         pinhole_root=root / data["pinhole_root"],
-        gaussian_root=root / data["gaussian_root"],
+        render_root=root / data["render_root"],
         mask_root=root / data["mask_root"],
         output_size=data.get("output_size", 512),
         condition_variant=data.get("condition_variant", "sam_mask"),
-        gaussian_opacity=data.get("gaussian_opacity", 1.0),
-        gaussian_threshold=data.get("gaussian_threshold", 16),
+        render_opacity=data.get("render_opacity", 1.0),
         render_kind=data.get("render_kind", "gaussian"),
+        render_alpha_filename=data.get("render_alpha_filename", "alpha.mkv"),
+        alpha_threshold=data.get("alpha_threshold", 0.0),
         loss_mask_source=data.get("loss_mask_source", "overlay"),
         loss_mask_root=(
             root / data["loss_mask_root"]
             if data.get("loss_mask_root")
             else None
         ),
-        loss_mask_threshold=data.get("loss_mask_threshold"),
+        loss_mask_alpha_filename=data.get(
+            "loss_mask_alpha_filename", "alpha.mkv"
+        ),
         include_numpy=include_numpy,
         max_open_sequences=data.get("max_open_sequences", 2),
     )
@@ -321,36 +365,91 @@ def summarize_loss_statistics(statistics: torch.Tensor) -> dict[str, float]:
     }
 
 
-def save_run_metadata(output: Path, config_path: Path, split_path: Path | None, config: dict, train_size: int, val_size: int) -> None:
+def save_run_metadata(
+    output: Path,
+    config_path: Path,
+    split_path: Path | None,
+    config: dict,
+    train_size: int,
+    val_size: int,
+    resume_from: Path | None = None,
+) -> None:
     output.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(config_path, output / "config.json")
+    now = datetime.now(timezone.utc)
+    stamp = now.strftime("%Y%m%dT%H%M%S%fZ")
+
+    canonical_config = output / "config.json"
+    if not canonical_config.exists():
+        shutil.copy2(config_path, canonical_config)
+        invocation_config = canonical_config
+    else:
+        prefix = "config_resume" if resume_from is not None else "config_rerun"
+        invocation_config = output / f"{prefix}_{stamp}.json"
+        shutil.copy2(config_path, invocation_config)
+
     if split_path is not None:
-        shutil.copy2(split_path, output / "split.json")
+        canonical_split = output / "split.json"
+        if not canonical_split.exists():
+            shutil.copy2(split_path, canonical_split)
+        else:
+            shutil.copy2(split_path, output / f"split_{stamp}.json")
+
     packages = {}
-    for name in ("torch", "torchvision", "accelerate", "diffusers", "transformers", "huggingface-hub", "numpy", "opencv-python", "smplx", "trimesh"):
+    for name in (
+        "torch",
+        "torchvision",
+        "accelerate",
+        "diffusers",
+        "transformers",
+        "huggingface-hub",
+        "numpy",
+        "opencv-python",
+        "smplx",
+        "trimesh",
+    ):
         try:
             packages[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
             packages[name] = None
     try:
-        commit = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         commit = None
     info = {
-        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "created_utc": now.isoformat(),
         "git_commit": commit,
+        "config_path": str(config_path),
+        "saved_config": invocation_config.name,
+        "resume_from": (
+            None if resume_from is None else str(resume_from.resolve())
+        ),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "torch_cuda": torch.version.cuda,
         "cuda_available": torch.cuda.is_available(),
-        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpu": (
+            torch.cuda.get_device_name(0)
+            if torch.cuda.is_available()
+            else None
+        ),
         "gpu_count": torch.cuda.device_count(),
         "packages": packages,
         "train_samples": train_size,
         "validation_samples": val_size,
         "seed": config.get("seed", 0),
     }
-    (output / "run_metadata.json").write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
+    payload = json.dumps(info, indent=2) + "\n"
+    (output / f"run_metadata_{stamp}.json").write_text(
+        payload, encoding="utf-8"
+    )
+    (output / "run_metadata.json").write_text(
+        payload, encoding="utf-8"
+    )
 
 
 @torch.no_grad()
@@ -463,7 +562,10 @@ def main() -> None:
         steps = int(configured_steps)
     output = root / train_cfg.get("output_dir", "outputs/hand_restoration/train")
     if accelerator.is_main_process:
-        save_run_metadata(output, config_path, split_path, config, len(train_dataset), len(val_dataset) if val_dataset else 0)
+        save_run_metadata(
+            output, config_path, split_path, config, len(train_dataset),
+            len(val_dataset) if val_dataset else 0, resume_from=args.resume,
+        )
         print(f"train_samples={len(train_dataset)} validation_samples={len(val_dataset) if val_dataset else 0} optimizer_steps_per_epoch={optimizer_steps_per_epoch} max_train_steps={steps}")
 
     device = accelerator.device
@@ -503,7 +605,7 @@ def main() -> None:
     else:
         restorer.controlnet, optimizer, train_loader, val_loader, scheduler = accelerator.prepare(restorer.controlnet, optimizer, train_loader, val_loader, scheduler)
 
-    expected_config_hash = stable_hash(config)
+    expected_config_hash = resume_compatible_config_hash(config)
     expected_dataset_hash = dataset_fingerprint(train_dataset)
     batches_per_epoch = len(train_loader)
     progress = TrainingProgress(
@@ -518,6 +620,34 @@ def main() -> None:
     accelerator.register_for_checkpointing(progress)
     if exact_resume:
         accelerator.load_state(str(args.resume.resolve()))
+        scheduler_name = train_cfg.get("lr_scheduler", "constant")
+        horizon_independent = scheduler_name in {
+            "constant", "constant_with_warmup"
+        }
+        allow_extension = bool(
+            train_cfg.get("allow_exact_target_extension", False)
+        )
+        if allow_extension and not horizon_independent:
+            raise RuntimeError(
+                "Exact target extension is only supported for constant or "
+                "constant_with_warmup LR schedules; "
+                f"got {scheduler_name!r}"
+            )
+        saved_target_steps = int(progress.target_steps)
+        legacy_config_compatible = False
+        if progress.loaded_format_version == 1:
+            saved_config_path = args.resume.parent / "config.json"
+            if not saved_config_path.is_file():
+                raise RuntimeError(
+                    "Legacy exact resume needs the original output/config.json "
+                    "to verify that only the target horizon changed."
+                )
+            saved_config = load_json_config(saved_config_path)
+            legacy_config_compatible = (
+                stable_hash(saved_config) == progress.config_hash
+                and resume_compatible_config_hash(saved_config)
+                == expected_config_hash
+            )
         progress.validate(
             config_hash=expected_config_hash,
             dataset_hash=expected_dataset_hash,
@@ -525,12 +655,15 @@ def main() -> None:
             optimizer_steps_per_epoch=optimizer_steps_per_epoch,
             batches_per_epoch=batches_per_epoch,
             num_processes=accelerator.num_processes,
+            allow_target_extension=allow_extension,
+            legacy_config_compatible=legacy_config_compatible,
         )
         train_generator.set_state(progress.train_generator_state)
         resume_step = int(progress.total_step_offset)
         if accelerator.is_main_process:
             print(
                 f"Exact resume from {args.resume}: "
+                f"target_steps={saved_target_steps}->{steps} "
                 f"run_step={progress.global_step}/{steps} "
                 f"total_step={resume_step + progress.global_step} "
                 f"epoch={progress.epoch} "

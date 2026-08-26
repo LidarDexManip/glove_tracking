@@ -2,27 +2,28 @@
   "seed": 7,
   "data": {
     "format": "hugg_aria_video",
-    "manifest_summary": "data/derived/hugg_aria_diffusion_ablation_common/manifest_summary.json",
-    "train_manifest": "data/derived/hugg_aria_diffusion_ablation_common/train_manifest.jsonl",
-    "val_manifest": "data/derived/hugg_aria_diffusion_ablation_common/seen_eval_manifest.jsonl",
+    "manifest_summary": "data/derived/hugg_aria_diffusion/manifest_summary.json",
+    "train_manifest": "data/derived/hugg_aria_diffusion/train_manifest.jsonl",
+    "val_manifest": "data/derived/hugg_aria_diffusion/seen_eval_manifest.jsonl",
     "pinhole_root": "data/HUGG_ARIA_PINHOLE",
-    "gaussian_root": "data/HUGG_ARIA_GAUSSIANS_ALIGNED",
     "render_kind": "gaussian",
     "loss_mask_source": "mano",
     "loss_mask_root": "data/HUGG_ARIA_MANO_ALIGNED",
-    "loss_mask_threshold": 16,
     "mask_root": "outputs/sam2_hugg_aria_masks_v3_pilot",
     "output_size": 512,
     "condition_variant": "sam_mask",
-    "gaussian_opacity": 1,
-    "gaussian_threshold": 16,
-    "max_open_sequences": 4
+    "max_open_sequences": 4,
+    "render_root": "data/HUGG_ARIA_GAUSSIANS_ALIGNED",
+    "render_opacity": 1,
+    "render_alpha_filename": "alpha.mkv",
+    "alpha_threshold": 0.0,
+    "loss_mask_alpha_filename": "alpha.mkv"
   },
   "model": {
     "base_model_id": "runwayml/stable-diffusion-v1-5",
     "controlnet_model_id": null,
-    "prompt": "a realistic egocentric RGB image of bare human hands",
-    "negative_prompt": "deformed hands, extra fingers, blurry, cartoon"
+    "prompt": "a realistic egocentric image of a human hand",
+    "negative_prompt": "deformed hand, extra fingers, blurry, cartoon"
   },
   "training": {
     "output_dir": "outputs/hand_restoration/hugg_aria_ablation_gaussian_manoloss_weight10_lr5e6_constant_5epochs",
@@ -32,7 +33,7 @@
     "validation_batch_size": 16,
     "gradient_accumulation_steps": 1,
     "mixed_precision": "bf16",
-    "learning_rate": 0.000005,
+    "learning_rate": 5e-06,
     "lr_scheduler": "constant_with_warmup",
     "warmup_steps": 100,
     "weight_decay": 0.01,
@@ -53,6 +54,7 @@
     "full_state_keep_last": 2,
     "validation_every": "epoch",
     "validation_seed": 7,
-    "use_wandb": false
+    "use_wandb": false,
+    "allow_exact_target_extension": true
   }
 }

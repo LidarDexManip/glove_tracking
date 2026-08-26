@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Render frame-aligned shaded MANO videos for the HUGG Aria ablation.
+"""Render frame-aligned MANO RGB plus lossless alpha for HUGG Aria.
 
-Only frames present in the filtered training manifest are rendered. Every other
-source frame is encoded as black, so output frame indices remain identical to
-the pinhole RGB video and to the aligned Gaussian renderer.
+SAM training eligibility is read directly from the per-sequence SQLite assets.
+Every source frame is emitted, and the final manifest later adds the nonempty
+MANO-alpha criterion to the existing SAM/QA filters.
 """
 from __future__ import annotations
 
@@ -12,9 +12,11 @@ import csv
 import hashlib
 import json
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import re
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -55,10 +57,11 @@ import hugg_aria_sam_policy as policy  # noqa: E402
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--manifest",
+        "--mask-root",
         type=Path,
-        default=ROOT / "data/derived/hugg_aria_diffusion_aligned/train_manifest.jsonl",
+        default=ROOT / "outputs/sam2_hugg_aria_masks_v3_pilot",
     )
+    parser.add_argument("--expected-sequences", type=int, default=136)
     parser.add_argument(
         "--pinhole-root", type=Path, default=ROOT / "data/HUGG_ARIA_PINHOLE"
     )
@@ -88,24 +91,42 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def load_manifest(path: Path) -> dict[str, set[int]]:
-    grouped: dict[str, set[int]] = defaultdict(set)
-    with path.open() as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            source = int(record["frame_index"])
-            aligned = int(record["gaussian_frame_index"])
-            if source != aligned:
-                raise RuntimeError(
-                    f"Manifest is not frame aligned: {record['sequence_id']} "
-                    f"source={source} render={aligned}"
-                )
-            grouped[str(record["sequence_id"])].add(source)
-    if not grouped:
-        raise RuntimeError(f"Manifest has no samples: {path}")
-    return dict(grouped)
+SEQUENCE_RE = re.compile(r"^P[0-9]+_[0-9a-f]+$")
+
+
+def load_training_eligible(
+    mask_root: Path, expected_sequences: int
+) -> dict[str, set[int]]:
+    grouped: dict[str, set[int]] = {}
+    sequence_dirs = sorted(
+        path
+        for path in mask_root.iterdir()
+        if path.is_dir()
+        and SEQUENCE_RE.fullmatch(path.name)
+        and (path / "masks.sqlite").is_file()
+        and (path / "_SUCCESS.json").is_file()
+    )
+    if len(sequence_dirs) != expected_sequences:
+        raise RuntimeError(
+            f"Expected {expected_sequences} complete SAM sequences, "
+            f"found {len(sequence_dirs)}"
+        )
+    for path in sequence_dirs:
+        connection = sqlite3.connect(path / "masks.sqlite")
+        try:
+            rows = connection.execute(
+                "SELECT frame_index FROM frames "
+                "WHERE training_eligible=1 ORDER BY frame_index"
+            ).fetchall()
+        finally:
+            connection.close()
+        grouped[path.name] = {int(row[0]) for row in rows}
+    return grouped
+
+
+def eligible_sha256(eligible: set[int]) -> str:
+    payload = ",".join(str(value) for value in sorted(eligible)).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 def read_timestamps(path: Path) -> list[int]:
@@ -143,7 +164,7 @@ def render_frame(
     model,
     hand_provider,
     headset_provider,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     collection = policy.pose_collection(hand_provider, timestamp)
     t_camera_world = policy.world_to_camera(
         calibration, headset_provider, timestamp
@@ -152,6 +173,7 @@ def render_frame(
         raise RuntimeError("missing MANO or headset pose")
     camera = scaled_camera(calibration, t_camera_world, size)
     image = np.zeros((size, size, 3), np.uint8)
+    alpha = np.zeros((size, size), np.uint8)
     z_buffer = np.full((size, size), np.inf, np.float32)
     rendered_hands = 0
     for handedness, layer in (
@@ -177,11 +199,12 @@ def render_frame(
         update = mask.astype(bool) & (depth > 0) & (depth < z_buffer)
         if np.any(update):
             image[update] = shaded[update]
+            alpha[update] = 255
             z_buffer[update] = depth[update]
             rendered_hands += 1
     if rendered_hands == 0:
         raise RuntimeError("MANO raster is empty")
-    return image
+    return image, alpha
 
 
 def encode_command(
@@ -202,6 +225,15 @@ def encode_command(
     return command + [
         "-pix_fmt", "yuv420p", "-g", str(round(fps)),
         "-movflags", "+faststart", str(output),
+    ]
+
+
+def encode_alpha_command(output: Path, size: int, fps: float) -> list[str]:
+    return [
+        "ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo",
+        "-pix_fmt", "gray", "-s", f"{size}x{size}", "-r", str(fps),
+        "-i", "-", "-an", "-c:v", "ffv1", "-level", "3",
+        "-pix_fmt", "gray", str(output),
     ]
 
 
@@ -232,7 +264,7 @@ def process_sequence(task: tuple) -> dict:
         codec,
         cq,
         overwrite,
-        manifest_hash,
+        eligible_digest,
         torch_threads,
     ) = task
     import torch
@@ -241,7 +273,7 @@ def process_sequence(task: tuple) -> dict:
     try:
         torch.set_num_interop_threads(1)
     except RuntimeError:
-        pass  # A reused ProcessPool worker has already fixed this global value.
+        pass
 
     source = Path(pinhole_root) / sequence
     output_root = Path(output_root)
@@ -250,14 +282,18 @@ def process_sequence(task: tuple) -> dict:
     if success.is_file() and not overwrite:
         metadata = json.loads(success.read_text())
         expected = {
-            "format_version": 2,
-            "manifest_sha256": manifest_hash,
+            "format_version": 3,
+            "eligible_sha256": eligible_digest,
             "eligible_frames": len(eligible),
             "output_size": size,
         }
-        if all(metadata.get(key) == value for key, value in expected.items()) and (
-            final / "mano_availability.csv"
-        ).is_file():
+        complete = (
+            all(metadata.get(key) == value for key, value in expected.items())
+            and (final / "reconstruction.mp4").is_file()
+            and (final / "alpha.mkv").is_file()
+            and (final / "mano_availability.csv").is_file()
+        )
+        if complete:
             return {"sequence": sequence, "status": "already_complete"}
         raise RuntimeError(f"Stale MANO render metadata: {success}")
     if final.exists() and not overwrite:
@@ -285,24 +321,34 @@ def process_sequence(task: tuple) -> dict:
     hand_provider = MANOHandDataProvider(str(required[3]), model)
     headset_provider = load_headset_pose_provider_from_csv(str(required[4]))
     output_root.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f".{sequence}.partial.", dir=output_root))
-    video = temporary / "reconstruction.mp4"
-    encoder = subprocess.Popen(
-        encode_command(video, size, fps, codec, cq),
+    temporary = Path(
+        tempfile.mkdtemp(prefix=f".{sequence}.partial.", dir=output_root)
+    )
+    rgb_path = temporary / "reconstruction.mp4"
+    alpha_path = temporary / "alpha.mkv"
+    rgb_encoder = subprocess.Popen(
+        encode_command(rgb_path, size, fps, codec, cq),
         stdin=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    blank = np.zeros((size, size, 3), np.uint8)
+    alpha_encoder = subprocess.Popen(
+        encode_alpha_command(alpha_path, size, fps),
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    blank_rgb = np.zeros((size, size, 3), np.uint8)
+    blank_alpha = np.zeros((size, size), np.uint8)
     availability = []
     started = time.perf_counter()
+    encoders = (("RGB", rgb_encoder), ("alpha", alpha_encoder))
     try:
         for frame_index, (timestamp, calibration) in enumerate(
             zip(timestamps, calibrations)
         ):
-            frame = blank
+            rgb, alpha = blank_rgb, blank_alpha
             if frame_index in eligible:
                 try:
-                    frame = render_frame(
+                    rgb, alpha = render_frame(
                         timestamp,
                         calibration,
                         size,
@@ -313,32 +359,61 @@ def process_sequence(task: tuple) -> dict:
                     availability.append((frame_index, 1, "ok"))
                 except RuntimeError as exc:
                     reason = str(exc)
-                    if reason not in {"missing MANO or headset pose", "MANO raster is empty"}:
+                    if reason not in {
+                        "missing MANO or headset pose",
+                        "MANO raster is empty",
+                    }:
                         raise
                     availability.append((frame_index, 0, reason))
-                    frame = blank
-            try:
-                encoder.stdin.write(np.ascontiguousarray(frame).tobytes())
-            except BrokenPipeError as exc:
-                stderr = encoder.stderr.read().decode("utf-8", errors="replace")
-                encoder.wait()
-                raise RuntimeError(f"ffmpeg pipe failed: {stderr}") from exc
-        encoder.stdin.close()
-        stderr = encoder.stderr.read().decode("utf-8", errors="replace")
-        return_code = encoder.wait()
-        if return_code:
-            raise RuntimeError(f"ffmpeg failed ({return_code}): {stderr}")
-        validate_video(video, total_frames, size)
-        with (temporary / "mano_availability.csv").open("w", newline="") as handle:
+            for name, encoder, frame in (
+                ("RGB", rgb_encoder, rgb),
+                ("alpha", alpha_encoder, alpha),
+            ):
+                try:
+                    encoder.stdin.write(
+                        np.ascontiguousarray(frame).tobytes()
+                    )
+                except BrokenPipeError as exc:
+                    stderr = encoder.stderr.read().decode(
+                        "utf-8", errors="replace"
+                    )
+                    encoder.wait()
+                    raise RuntimeError(
+                        f"{name} ffmpeg pipe failed: {stderr}"
+                    ) from exc
+
+        for _, encoder in encoders:
+            encoder.stdin.close()
+        failures = []
+        for name, encoder in encoders:
+            stderr = encoder.stderr.read().decode(
+                "utf-8", errors="replace"
+            )
+            return_code = encoder.wait()
+            if return_code:
+                failures.append(f"{name} ffmpeg ({return_code}): {stderr}")
+        if failures:
+            raise RuntimeError("; ".join(failures))
+
+        validate_video(rgb_path, total_frames, size)
+        validate_video(alpha_path, total_frames, size)
+        with (temporary / "mano_availability.csv").open(
+            "w", newline=""
+        ) as handle:
             writer = csv.writer(handle)
             writer.writerow(("frame_index", "mano_valid", "reason"))
             writer.writerows(availability)
+
         valid_count = sum(row[1] for row in availability)
         metadata = {
-            "format_version": 2,
+            "format_version": 3,
             "sequence": sequence,
             "render_kind": "mano",
             "frame_alignment": "output_frame_index_equals_source_frame_index",
+            "rgb_semantics": "straight_rgb; composite_with_alpha",
+            "alpha_semantics": "binary_visible_mano_raster",
+            "alpha_filename": "alpha.mkv",
+            "alpha_codec": "ffv1_lossless_gray8",
             "total_frames": total_frames,
             "eligible_frames": len(eligible),
             "mano_valid_frames": valid_count,
@@ -346,9 +421,9 @@ def process_sequence(task: tuple) -> dict:
             "blank_frames": total_frames - valid_count,
             "output_size": size,
             "fps": fps,
-            "codec": codec,
+            "rgb_codec": codec,
             "cq": cq,
-            "manifest_sha256": manifest_hash,
+            "eligible_sha256": eligible_digest,
             "elapsed_seconds": time.perf_counter() - started,
         }
         (temporary / "_SUCCESS.json").write_text(
@@ -359,34 +434,48 @@ def process_sequence(task: tuple) -> dict:
         temporary.replace(final)
         return {"sequence": sequence, "status": "rendered", **metadata}
     except BaseException:
-        if encoder.poll() is None:
-            encoder.kill()
-            encoder.wait()
+        for _, encoder in encoders:
+            if encoder.poll() is None:
+                encoder.kill()
+                encoder.wait()
         shutil.rmtree(temporary, ignore_errors=True)
         raise
 
 
 def main() -> None:
     args = arguments()
-    manifest = args.manifest.resolve()
-    grouped = load_manifest(manifest)
+    pinhole_root = args.pinhole_root.resolve()
+    readme = pinhole_root / "README.md"
+    if not readme.is_file() or "# HUGG ARIA Pinhole" not in (
+        readme.read_text(encoding="utf-8")
+    ):
+        raise RuntimeError(
+            "pinhole_root must be a local snapshot of "
+            "LIDAR-GT/HUGG_ARIA_PINHOLE"
+        )
+
+    grouped = load_training_eligible(
+        args.mask_root.resolve(), args.expected_sequences
+    )
     sequences = sorted(grouped)
     if args.sequence:
         requested = set(args.sequence)
         missing = sorted(requested - set(sequences))
         if missing:
-            raise KeyError(f"Sequences are absent from manifest: {missing}")
-        sequences = [sequence for sequence in sequences if sequence in requested]
+            raise KeyError(f"Sequences are absent from SAM assets: {missing}")
+        sequences = [
+            sequence for sequence in sequences if sequence in requested
+        ]
     if args.max_sequences:
         sequences = sequences[: args.max_sequences]
     if not sequences:
         raise RuntimeError("No sequences selected")
-    manifest_hash = sha256(manifest)
+
     tasks = [
         (
             sequence,
             grouped[sequence],
-            str(args.pinhole_root.resolve()),
+            str(pinhole_root),
             str(args.output_root.resolve()),
             str(args.mano_model_dir.resolve()),
             args.size,
@@ -394,13 +483,17 @@ def main() -> None:
             args.codec,
             args.cq,
             args.overwrite,
-            manifest_hash,
+            eligible_sha256(grouped[sequence]),
             args.torch_threads,
         )
         for sequence in sequences
     ]
-    with ProcessPoolExecutor(max_workers=max(1, args.workers)) as executor:
-        futures = [executor.submit(process_sequence, task) for task in tasks]
+    with ProcessPoolExecutor(
+        max_workers=max(1, args.workers)
+    ) as executor:
+        futures = [
+            executor.submit(process_sequence, task) for task in tasks
+        ]
         for future in as_completed(futures):
             print(json.dumps(future.result(), sort_keys=True), flush=True)
 

@@ -48,8 +48,6 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("sequence", type=Path)
     parser.add_argument("--support-root", type=Path,
                         default=ROOT / "data/HUGG_ARIA_SAM_SUPPORT")
-    parser.add_argument("--mapping-root", type=Path,
-                        default=ROOT / "outputs/gaussian_frame_mapping")
     parser.add_argument("--output-root", type=Path,
                         default=ROOT / "outputs/sam2_hugg_aria_masks_v3")
     parser.add_argument("--jpeg-quality", type=int, default=95)
@@ -107,9 +105,6 @@ def create_schema(connection: sqlite3.Connection) -> None:
             mano_pose_qa_available INTEGER NOT NULL,
             hand_visible INTEGER NOT NULL,
             good_exposure INTEGER NOT NULL,
-            gaussian_valid INTEGER NOT NULL,
-            gaussian_left_valid INTEGER NOT NULL,
-            gaussian_right_valid INTEGER NOT NULL,
             active_hands INTEGER NOT NULL,
             left_prompt_source TEXT,
             right_prompt_source TEXT,
@@ -148,9 +143,9 @@ def initialize_database(connection: sqlite3.Connection, plans: list[policy.Frame
         INSERT INTO frames(
             frame_index,timestamp_ns,episode_index,labels_zlib,training_candidate,
             qa_pass,mano_pose_qa_available,hand_visible,good_exposure,
-            gaussian_valid,gaussian_left_valid,gaussian_right_valid,active_hands,
+            active_hands,
             left_prompt_source,right_prompt_source,training_filter_reason,status
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         [
             (
@@ -158,9 +153,7 @@ def initialize_database(connection: sqlite3.Connection, plans: list[policy.Frame
                 episode_by_frame.get(item.frame_index), sqlite3.Binary(zero_blob),
                 int(item.training_candidate), int(item.qa_pass),
                 int(item.mano_pose_qa_available), int(item.hand_visible),
-                int(item.good_exposure), int(item.gaussian_valid),
-                int(item.gaussian_left_valid), int(item.gaussian_right_valid),
-                item.active_hands,
+                int(item.good_exposure), item.active_hands,
                 None if item.left_prompt is None else item.left_prompt.source,
                 None if item.right_prompt is None else item.right_prompt.source,
                 item.training_filter_reason,
@@ -186,19 +179,14 @@ def write_sam_frame(connection: sqlite3.Connection, frame_index: int,
                     labels: np.ndarray) -> None:
     area_left = int((labels == 1).sum())
     area_right = int((labels == 2).sum())
-    candidate, gaussian_left, gaussian_right, filter_reason = connection.execute(
-        "SELECT training_candidate,gaussian_left_valid,gaussian_right_valid,"
-        "training_filter_reason FROM frames WHERE frame_index=?", (frame_index,)
+    candidate, filter_reason = connection.execute(
+        "SELECT training_candidate,training_filter_reason FROM frames "
+        "WHERE frame_index=?", (frame_index,)
     ).fetchone()
     candidate = bool(candidate)
-    matched_hand = ((bool(gaussian_left) and area_left > 0)
-                    or (bool(gaussian_right) and area_right > 0))
-    eligible = candidate and matched_hand
-    if candidate and not matched_hand:
-        filter_reason = (
-            "sam_empty" if area_left + area_right == 0
-            else "no_matching_gaussian_sam_hand"
-        )
+    eligible = candidate and area_left + area_right > 0
+    if candidate and not eligible:
+        filter_reason = "sam_empty"
     status = "sam_complete_training" if eligible else (
         "sam_empty_filtered" if area_left + area_right == 0 else "sam_complete_filtered"
     )
@@ -236,7 +224,6 @@ def main() -> None:
     args = arguments()
     sequence = args.sequence.resolve()
     support = args.support_root.resolve() / sequence.name
-    mapping = args.mapping_root.resolve() / f"{sequence.name}.csv"
     required = (
         sequence / "_SUCCESS.json", sequence / "rgb_214_1_pinhole.mp4",
         sequence / "frame_timestamps_214_1.csv",
@@ -249,7 +236,7 @@ def main() -> None:
         sequence / "masks/mask_hand_visible.csv",
         sequence / "masks/mask_good_exposure.csv",
         support / "box2d_hands.csv",
-        support / "mps/slam/online_calibration.jsonl", mapping, args.checkpoint,
+        support / "mps/slam/online_calibration.jsonl", args.checkpoint,
         ROOT / "mano_v1_2/models/MANO_LEFT.pkl",
         ROOT / "mano_v1_2/models/MANO_RIGHT.pkl",
     )
@@ -285,7 +272,7 @@ def main() -> None:
     planning_started = time.perf_counter()
     plans = policy.build_frame_plan(
         timestamps, calibrations, sequence / "masks", support / "box2d_hands.csv",
-        support / "mps", sequence / "timecode_devicetime_mapping.csv", mapping,
+        support / "mps", sequence / "timecode_devicetime_mapping.csv",
         hand_provider, headset_provider, args.box_padding,
         args.min_box_side, args.min_box_area,
     )
@@ -297,7 +284,7 @@ def main() -> None:
     connection = sqlite3.connect(partial_db)
     create_schema(connection)
     for key, value in {
-        "format_version": 3, "sequence": sequence.name, "height": height,
+        "format_version": 4, "sequence": sequence.name, "height": height,
         "width": width, "total_frames": total_frames,
         "labels": {"0": "background", "1": "left_hand", "2": "right_hand"},
         "prompt_policy": (
@@ -306,12 +293,12 @@ def main() -> None:
         ),
         "episode_policy": "split only when per-hand presence state changes",
         "filter_policy": (
-            "post-inference: Gaussian mapping valid AND mask_qa_pass AND "
-            "mask_hand_pose_available AND mask_hand_visible AND mask_good_exposure "
-            "AND a nonempty SAM label for the corresponding Gaussian-valid hand; "
-            "no area ceiling"
+            "post-inference: mask_qa_pass AND mask_hand_pose_available AND "
+            "mask_hand_visible AND mask_good_exposure AND a nonempty SAM label; "
+            "aligned render-alpha validity is applied by the single training "
+            "manifest; no area ceiling"
         ),
-        "support_source": str(support), "gaussian_mapping": str(mapping),
+        "support_source": str(support),
         "planning_seconds": planning_seconds, "box_padding": args.box_padding,
     }.items():
         set_metadata(connection, key, value)
