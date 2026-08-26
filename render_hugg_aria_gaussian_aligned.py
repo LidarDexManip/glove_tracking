@@ -57,6 +57,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--supersample", type=int, default=2)
+    parser.add_argument("--torch-threads", type=int, default=1)
     parser.add_argument(
         "--max-frames",
         type=int,
@@ -339,6 +340,11 @@ def main() -> None:
     from glove2hand.viewer.render_views import reconstruction_frames
 
     torch = import_torch()
+    torch.set_num_threads(max(1, args.torch_threads))
+    try:
+        torch.set_num_interop_threads(1)
+    except RuntimeError:
+        pass
     api = {
         "torch": torch,
         "load_npz": load_npz,
@@ -358,6 +364,7 @@ def main() -> None:
                 "num_shards": args.num_shards,
                 "sequence_count": len(sequences),
                 "device": args.device,
+                "torch_threads": args.torch_threads,
                 "output_root": str(args.output_root),
             }
         ),
