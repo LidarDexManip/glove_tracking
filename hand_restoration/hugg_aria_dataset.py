@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from .adaptive_hand_crops import components_from_seeds
 from .hugg_aria_conditioning import (
     CropBox,
     build_faithful_condition,
@@ -111,8 +112,15 @@ class HuggAriaOverlayDataset(Dataset):
             raise ValueError("loss_mask_source must be overlay, sam, or mano")
         self.loss_mask_source = loss_mask_source
         self.loss_mask_root = Path(loss_mask_root) if loss_mask_root else None
-        if spatial_mode not in {"full_frame", "mano_square_crop"}:
-            raise ValueError("spatial_mode must be full_frame or mano_square_crop")
+        if spatial_mode not in {
+            "full_frame",
+            "mano_square_crop",
+            "mano_adaptive_hand_crop",
+        }:
+            raise ValueError(
+                "spatial_mode must be full_frame, mano_square_crop, or "
+                "mano_adaptive_hand_crop"
+            )
         if condition_style not in {"legacy_overlay", "glove2hand_faithful"}:
             raise ValueError(
                 "condition_style must be legacy_overlay or glove2hand_faithful"
@@ -161,7 +169,10 @@ class HuggAriaOverlayDataset(Dataset):
         self.condition_fill_value = float(condition_fill_value)
         self._needs_mano_alpha = (
             self.loss_mask_source == "mano"
-            or self.spatial_mode == "mano_square_crop"
+            or self.spatial_mode in {
+                "mano_square_crop",
+                "mano_adaptive_hand_crop",
+            }
             or self.condition_style == "glove2hand_faithful"
         )
         if self._needs_mano_alpha and self.loss_mask_root is None:
@@ -175,6 +186,19 @@ class HuggAriaOverlayDataset(Dataset):
         self.loss_mask_alpha_filename = str(loss_mask_alpha_filename)
         self.include_numpy = bool(include_numpy)
         self.max_open_sequences = int(max_open_sequences)
+        if self.spatial_mode == "mano_adaptive_hand_crop":
+            required = {
+                "adaptive_crop_box_xyxy",
+                "adaptive_crop_mode",
+                "adaptive_crop_scale",
+            }
+            for index, record in enumerate(self.samples):
+                missing = required - record.keys()
+                if missing:
+                    raise ValueError(
+                        f"Adaptive crop manifest row {index} is missing: "
+                        f"{sorted(missing)}"
+                    )
         self._videos: OrderedDict[
             str,
             tuple[cv2.VideoCapture, cv2.VideoCapture, cv2.VideoCapture, int],
@@ -381,10 +405,40 @@ class HuggAriaOverlayDataset(Dataset):
             sequence, frame_index
         )
 
-        if self.spatial_mode == "mano_square_crop":
+        crop_scale = self.crop_scale
+        handedness = "both"
+        if self.spatial_mode == "mano_adaptive_hand_crop":
+            seeds = record.get("adaptive_component_seeds_xy")
+            if seeds is not None:
+                instance_mask = components_from_seeds(
+                    mano_loss_alpha > 0, seeds
+                )
+                mano_loss_alpha = np.where(
+                    instance_mask, mano_loss_alpha, 0
+                ).astype(mano_loss_alpha.dtype)
+                render_instance_mask = cv2.resize(
+                    instance_mask.astype(np.uint8),
+                    (render_alpha_native.shape[1], render_alpha_native.shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                ).astype(bool)
+                render_alpha_native = np.where(
+                    render_instance_mask, render_alpha_native, 0
+                ).astype(render_alpha_native.dtype)
+            values = [int(value) for value in record["adaptive_crop_box_xyxy"]]
+            if len(values) != 4:
+                raise ValueError("adaptive crop box must be XYXY")
+            mano_box = CropBox(*values)
+            crop_scale = float(record["adaptive_crop_scale"])
+            handedness = str(record.get("adaptive_handedness", "unknown"))
+        elif self.spatial_mode == "mano_square_crop":
             mano_box = square_crop_from_mask(
                 mano_loss_alpha > 0, scale=self.crop_scale
             )
+
+        if self.spatial_mode in {
+            "mano_square_crop",
+            "mano_adaptive_hand_crop",
+        }:
             target_box = map_crop_box(
                 mano_box, mano_loss_alpha.shape, target_native.shape[:2]
             )
@@ -561,14 +615,16 @@ class HuggAriaOverlayDataset(Dataset):
                 "sequence_id": sequence,
                 "frame_id": frame_index,
                 "camera_id": "214-1-pinhole",
-                "handedness": "both",
+                "handedness": handedness,
                 "participant_id": sequence.split("_", 1)[0],
                 "source_sequence_id": sequence,
                 "original_image_size": list(original_image_size),
                 "model_input_size": [self.output_size, self.output_size],
                 "spatial_mode": self.spatial_mode,
-                "crop_scale": self.crop_scale,
+                "crop_scale": crop_scale,
                 "crop_box_xyxy": target_box.as_list(),
+                "adaptive_crop_mode": record.get("adaptive_crop_mode"),
+                "source_manifest_index": record.get("source_manifest_index"),
                 "condition_variant": self.condition_variant,
                 "condition_style": self.condition_style,
                 "overlay_logic": (
