@@ -50,7 +50,7 @@ def record_key(record: dict) -> tuple[str, int]:
 
 
 class HuggAriaInferenceApp:
-    """Serve only records frozen into the filtered seen-eval manifest."""
+    """Serve every record in the filtered training manifest."""
 
     def __init__(
         self,
@@ -67,18 +67,25 @@ class HuggAriaInferenceApp:
 
         train_manifest = absolute(data["train_manifest"])
         seen_manifest = absolute(data["val_manifest"])
-        train_keys = {record_key(record) for record in manifest_records(train_manifest)}
+        train_records = manifest_records(train_manifest)
+        train_keys = {record_key(record) for record in train_records}
         seen_records = manifest_records(seen_manifest)
-        missing = [record_key(record) for record in seen_records if record_key(record) not in train_keys]
+        missing = [
+            record_key(record)
+            for record in seen_records
+            if record_key(record) not in train_keys
+        ]
         if missing:
             raise RuntimeError(
-                f"Refusing to start: {len(missing)} seen records are not in the filtered train manifest."
+                f"Refusing to start: {len(missing)} seen records are not in "
+                "the filtered train manifest."
             )
-        if not seen_records:
-            raise RuntimeError("The filtered seen-eval manifest is empty.")
+        if not train_records:
+            raise RuntimeError("The filtered training manifest is empty.")
 
+        self.records = train_records
         self.dataset = HuggAriaOverlayDataset(
-            manifest=seen_manifest,
+            manifest=train_manifest,
             pinhole_root=absolute(data["pinhole_root"]),
             render_root=absolute(data["render_root"]),
             mask_root=absolute(data["mask_root"]),
@@ -97,14 +104,42 @@ class HuggAriaInferenceApp:
             loss_mask_alpha_filename=data.get(
                 "loss_mask_alpha_filename", "alpha.mkv"
             ),
+            spatial_mode=data.get("spatial_mode", "full_frame"),
+            crop_scale=data.get("crop_scale", 1.2),
+            condition_style=data.get("condition_style", "legacy_overlay"),
+            hand_mask_dilation_px=data.get("hand_mask_dilation_px", 8),
+            wrist_mask_enabled=data.get("wrist_mask_enabled", True),
+            wrist_geometry_source=data.get(
+                "wrist_geometry_source", "silhouette_pca"
+            ),
+            wrist_ring_root=(
+                absolute(data["wrist_ring_root"])
+                if data.get("wrist_ring_root")
+                else None
+            ),
+            wrist_length_ratio=data.get("wrist_length_ratio", 0.10),
+            wrist_width_scale=data.get("wrist_width_scale", 1.10),
+            wrist_sleeve_forearm_ratio=data.get(
+                "wrist_sleeve_forearm_ratio", 0.60
+            ),
+            wrist_sleeve_hand_overlap_ratio=data.get(
+                "wrist_sleeve_hand_overlap_ratio", 0.25
+            ),
+            wrist_ring_transverse_scale=data.get(
+                "wrist_ring_transverse_scale", 1.30
+            ),
+            wrist_sleeve_orientation=data.get(
+                "wrist_sleeve_orientation", "ring_min_area"
+            ),
+            condition_fill_value=data.get("condition_fill_value", 0.0),
             include_numpy=True,
             max_open_sequences=data.get("max_open_sequences", 2),
         )
-        self.sample_labels = [
-            f"{index:03d} | {record['sequence_id']} | frame {int(record['frame_index'])}"
-            for index, record in enumerate(seen_records)
-        ]
-        self.sample_indices = {label: index for index, label in enumerate(self.sample_labels)}
+        self.sequence_to_indices: dict[str, list[int]] = {}
+        for index, record in enumerate(self.records):
+            sequence_id = str(record["sequence_id"])
+            self.sequence_to_indices.setdefault(sequence_id, []).append(index)
+        self.sequence_ids = sorted(self.sequence_to_indices)
         if isinstance(checkpoint_dirs, Path):
             checkpoint_dirs = [checkpoint_dirs]
         self.checkpoint_dirs = tuple(path.resolve() for path in checkpoint_dirs)
@@ -136,17 +171,34 @@ class HuggAriaInferenceApp:
             for path in reversed(self.checkpoints())
         ]
 
-    def sample(self, label: str) -> dict:
-        if label not in self.sample_indices:
-            raise ValueError("Select a sample from the filtered seen-eval list.")
+    def frame_choices(self, sequence_id: str) -> list[tuple[str, str]]:
+        if sequence_id not in self.sequence_to_indices:
+            raise ValueError(
+                "Select a sequence from the filtered training manifest."
+            )
+        return [
+            (
+                f"frame {int(self.records[index]['frame_index']):06d}",
+                str(index),
+            )
+            for index in self.sequence_to_indices[sequence_id]
+        ]
+
+    def sample(self, index_value: str | int) -> dict:
+        try:
+            index = int(index_value)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Select a valid frame.") from error
+        if index < 0 or index >= len(self.dataset):
+            raise ValueError("Selected frame is outside the filtered manifest.")
         # Dataset performs a second guard against training_eligible=false in SQLite.
         # Gradio may use a different worker thread for consecutive callbacks, while
         # the dataset intentionally caches SQLite connections and video decoders.
         with self.dataset_lock:
-            return self.dataset[self.sample_indices[label]]
+            return self.dataset[index]
 
-    def preview(self, label: str):
-        sample = self.sample(label)
+    def preview(self, index_value: str | int):
+        sample = self.sample(index_value)
         metadata = sample["metadata"]
         status = (
             f"Eligible sample: {metadata['sequence_id']} "
@@ -166,12 +218,18 @@ class HuggAriaInferenceApp:
             self.restorer.load_controlnet(checkpoint)
             self.loaded_checkpoint = checkpoint
 
-    def infer(self, label: str, checkpoint_value: str, steps: int, seed: int):
+    def infer(
+        self,
+        index_value: str,
+        checkpoint_value: str,
+        steps: int,
+        seed: int,
+    ):
         checkpoint = Path(checkpoint_value).resolve()
         valid = {path.resolve() for path in self.checkpoints()}
         if checkpoint not in valid or checkpoint.parent not in self.checkpoint_dirs:
             raise ValueError("Select a complete checkpoint from the configured training output.")
-        sample = self.sample(label)
+        sample = self.sample(index_value)
         with self.lock:
             self._load_checkpoint(checkpoint)
             result = run_inference(
@@ -182,14 +240,18 @@ class HuggAriaInferenceApp:
                 seed=int(seed),
             )
 
-        index = self.sample_indices[label]
+        metadata = sample["metadata"]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        experiment = self.output_dir / f"sample_{index:03d}_{checkpoint.stem}_{timestamp}"
+        experiment = self.output_dir / (
+            f"{metadata['sequence_id']}_frame_{int(metadata['frame_id']):06d}_"
+            f"{checkpoint.stem}_{timestamp}"
+        )
         experiment.mkdir(parents=True, exist_ok=False)
         save_rgb(experiment / "condition.png", sample["condition_rgb_np"])
         save_rgb(experiment / "raw_model_output.png", result.generated)
         save_rgb(experiment / "gt.png", sample["target_rgb_np"])
-        metadata = sample["metadata"]
+        if result.restored_full is not None:
+            save_rgb(experiment / "restored_full.png", result.restored_full)
         status = (
             f"Done: `{checkpoint.name}` · `{metadata['sequence_id']}` frame "
             f"{metadata['frame_id']} · saved to `{experiment}`."
@@ -212,18 +274,28 @@ def build_ui(app: HuggAriaInferenceApp):
             <div class="hero">
               <h1>HUGG Aria Hand Restoration</h1>
               <p>Condition input, raw diffusion output, and ground truth. Every selectable frame is from
-              the frozen, training-eligible in-domain manifest.</p>
+              the complete filtered training manifest.</p>
             </div>
             """
         )
+        first_sequence = app.sequence_ids[0]
+        first_frames = app.frame_choices(first_sequence)
         with gr.Row():
-            sample = gr.Dropdown(
-                choices=app.sample_labels,
-                value=app.sample_labels[0],
-                label=f"Eligible seen sample ({len(app.sample_labels)} total)",
+            sequence = gr.Dropdown(
+                choices=app.sequence_ids,
+                value=first_sequence,
+                label=f"Sequence ({len(app.sequence_ids)} total)",
                 allow_custom_value=False,
             )
-            random_button = gr.Button("Random eligible sample")
+            frame = gr.Dropdown(
+                choices=first_frames,
+                value=first_frames[0][1],
+                label=f"Valid frame ({len(first_frames)} in sequence)",
+                allow_custom_value=False,
+            )
+            random_button = gr.Button(
+                f"Random valid frame ({len(app.dataset):,} total)"
+            )
         with gr.Row():
             checkpoint = gr.Dropdown(
                 choices=choices,
@@ -241,10 +313,36 @@ def build_ui(app: HuggAriaInferenceApp):
             output = gr.Image(label="Raw model output", type="numpy")
             target = gr.Image(label="GT", type="numpy")
 
+        def select_sequence(sequence_id: str):
+            frame_choices = app.frame_choices(sequence_id)
+            frame_value = frame_choices[0][1]
+            preview_values = app.preview(frame_value)
+            return (
+                gr.Dropdown(
+                    choices=frame_choices,
+                    value=frame_value,
+                    label=f"Valid frame ({len(frame_choices)} in sequence)",
+                    allow_custom_value=False,
+                ),
+                *preview_values,
+            )
+
         def random_sample():
-            label = random.choice(app.sample_labels)
-            condition_value, output_value, target_value, status_value = app.preview(label)
-            return label, condition_value, output_value, target_value, status_value
+            index = random.randrange(len(app.dataset))
+            record = app.records[index]
+            sequence_id = str(record["sequence_id"])
+            frame_choices = app.frame_choices(sequence_id)
+            preview_values = app.preview(str(index))
+            return (
+                sequence_id,
+                gr.Dropdown(
+                    choices=frame_choices,
+                    value=str(index),
+                    label=f"Valid frame ({len(frame_choices)} in sequence)",
+                    allow_custom_value=False,
+                ),
+                *preview_values,
+            )
 
         def refresh_checkpoints():
             refreshed = app.checkpoint_choices()
@@ -257,17 +355,35 @@ def build_ui(app: HuggAriaInferenceApp):
                 allow_custom_value=False,
             )
 
-        sample.change(app.preview, [sample], [condition, output, target, status])
+        sequence.input(
+            select_sequence,
+            [sequence],
+            [frame, condition, output, target, status],
+            show_progress="hidden",
+        )
+        frame.input(
+            app.preview,
+            [frame],
+            [condition, output, target, status],
+            show_progress="hidden",
+        )
         random_button.click(
-            random_sample, outputs=[sample, condition, output, target, status]
+            random_sample,
+            outputs=[sequence, frame, condition, output, target, status],
+            show_progress="hidden",
         )
         refresh_button.click(refresh_checkpoints, outputs=[checkpoint])
         run_button.click(
             app.infer,
-            [sample, checkpoint, steps, seed],
+            [frame, checkpoint, steps, seed],
             [output, status],
         )
-        demo.load(app.preview, [sample], [condition, output, target, status])
+        demo.load(
+            app.preview,
+            [frame],
+            [condition, output, target, status],
+            show_progress="hidden",
+        )
 
     return demo
 

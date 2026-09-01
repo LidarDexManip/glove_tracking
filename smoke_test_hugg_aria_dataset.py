@@ -47,6 +47,34 @@ def dataset(
         loss_mask_alpha_filename=data.get(
             "loss_mask_alpha_filename", "alpha.mkv"
         ),
+        spatial_mode=data.get("spatial_mode", "full_frame"),
+        crop_scale=data.get("crop_scale", 1.2),
+        condition_style=data.get("condition_style", "legacy_overlay"),
+        hand_mask_dilation_px=data.get("hand_mask_dilation_px", 8),
+        wrist_mask_enabled=data.get("wrist_mask_enabled", True),
+        wrist_geometry_source=data.get(
+            "wrist_geometry_source", "silhouette_pca"
+        ),
+        wrist_ring_root=(
+            ROOT / data["wrist_ring_root"]
+            if data.get("wrist_ring_root")
+            else None
+        ),
+        wrist_length_ratio=data.get("wrist_length_ratio", 0.10),
+        wrist_width_scale=data.get("wrist_width_scale", 1.10),
+        wrist_sleeve_forearm_ratio=data.get(
+            "wrist_sleeve_forearm_ratio", 0.60
+        ),
+        wrist_sleeve_hand_overlap_ratio=data.get(
+            "wrist_sleeve_hand_overlap_ratio", 0.25
+        ),
+        wrist_ring_transverse_scale=data.get(
+            "wrist_ring_transverse_scale", 1.30
+        ),
+        wrist_sleeve_orientation=data.get(
+            "wrist_sleeve_orientation", "ring_min_area"
+        ),
+        condition_fill_value=data.get("condition_fill_value", 0.0),
         include_numpy=False,
         max_open_sequences=1,
     )
@@ -65,7 +93,10 @@ def main() -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl") as handle:
         handle.write(json.dumps(record) + "\n")
         handle.flush()
-        sample = dataset(config, Path(handle.name), "sam_mask")[0]
+        condition_variant = config["data"].get(
+            "condition_variant", "sam_mask"
+        )
+        sample = dataset(config, Path(handle.name), condition_variant)[0]
         direct = dataset(config, Path(handle.name), "direct_overlay")[0]
 
     if not torch.equal(sample["target_rgb"], direct["target_rgb"]):
@@ -80,7 +111,11 @@ def main() -> None:
         "target_equal": True,
         "sam_edit_pixels": int(sample["edit_mask"].sum()),
         "direct_edit_pixels": int(direct["edit_mask"].sum()),
+        "condition_mask_pixels": int(sample["condition_mask"].sum()),
+        "loss_mask_pixels": int(sample["loss_mask"].sum()),
         "target_shape": list(sample["target_rgb"].shape),
+        "spatial_mode": metadata["spatial_mode"],
+        "crop_box_xyxy": metadata["crop_box_xyxy"],
         "hand_loss_weight": config["training"]["hand_loss_weight"],
     }
     print(json.dumps(result, indent=2))

@@ -314,6 +314,34 @@ def make_hugg_aria_dataset(
         loss_mask_alpha_filename=data.get(
             "loss_mask_alpha_filename", "alpha.mkv"
         ),
+        spatial_mode=data.get("spatial_mode", "full_frame"),
+        crop_scale=data.get("crop_scale", 1.2),
+        condition_style=data.get("condition_style", "legacy_overlay"),
+        hand_mask_dilation_px=data.get("hand_mask_dilation_px", 8),
+        wrist_mask_enabled=data.get("wrist_mask_enabled", True),
+        wrist_geometry_source=data.get(
+            "wrist_geometry_source", "silhouette_pca"
+        ),
+        wrist_ring_root=(
+            root / data["wrist_ring_root"]
+            if data.get("wrist_ring_root")
+            else None
+        ),
+        wrist_length_ratio=data.get("wrist_length_ratio", 0.10),
+        wrist_width_scale=data.get("wrist_width_scale", 1.10),
+        wrist_sleeve_forearm_ratio=data.get(
+            "wrist_sleeve_forearm_ratio", 0.60
+        ),
+        wrist_sleeve_hand_overlap_ratio=data.get(
+            "wrist_sleeve_hand_overlap_ratio", 0.25
+        ),
+        wrist_ring_transverse_scale=data.get(
+            "wrist_ring_transverse_scale", 1.30
+        ),
+        wrist_sleeve_orientation=data.get(
+            "wrist_sleeve_orientation", "ring_min_area"
+        ),
+        condition_fill_value=data.get("condition_fill_value", 0.0),
         include_numpy=include_numpy,
         max_open_sequences=data.get("max_open_sequences", 2),
     )
@@ -467,7 +495,8 @@ def validation_loss(
         generator = torch.Generator(device=accelerator.device).manual_seed(seed + batch_index)
         _, statistics = restorer.training_loss(
             batch["target_rgb"], batch["condition_rgb"],
-            edit_mask=batch.get("edit_mask"),
+            condition_mask=batch.get("condition_mask"),
+            edit_mask=batch.get("loss_mask", batch.get("edit_mask")),
             hand_loss_weight=hand_loss_weight,
             generator=generator,
             return_statistics=True,
@@ -730,7 +759,8 @@ def main() -> None:
                 with accelerator.accumulate(restorer.controlnet):
                     loss, batch_statistics = restorer.training_loss(
                         batch["target_rgb"], batch["condition_rgb"],
-                        edit_mask=batch.get("edit_mask"),
+                        condition_mask=batch.get("condition_mask"),
+                        edit_mask=batch.get("loss_mask", batch.get("edit_mask")),
                         hand_loss_weight=hand_loss_weight,
                         return_statistics=True,
                     )
