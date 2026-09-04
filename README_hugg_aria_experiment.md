@@ -124,8 +124,12 @@ The text condition is inherited from the original SD1.5 ControlNet
 implementation in this repository. It is fixed for every sample and is not an
 ablation variable.
 
-Spatial augmentation and hand-centric crops are not part of the current data
-contract; they may be tested later.
+The frozen `faithful_mano_v2` baseline uses the 1.5x MANO square crop. The later
+`adaptive_splitcrop_v1` visual/system baseline splits distant hands into
+independent 1.5x crops and keeps nearby or touching hands in one 1.2x crop. Its
+derived manifests and checkpoint identity are recorded under
+`baselines/adaptive_splitcrop_v1/`. Because that policy changes the sample
+population, its aggregate loss is not a controlled comparison with v2.
 
 ## 7. Exact resume and LR horizon
 
@@ -141,3 +145,13 @@ the target is rejected.
 Target extension is deliberately rejected for cosine/linear schedules because
 their behavior depends on the originally declared horizon. This prevents an
 already-decayed schedule from being mislabeled as an exact, useful extension.
+
+## 8. Frozen baselines
+
+- `baselines/faithful_mano_v2/`: faithful MANO crop + latent-mask baseline.
+- `baselines/adaptive_splitcrop_v1/`: visually selected adaptive split-hand crop
+  baseline, trained for 15,380 optimizer steps on commit `3b29933`.
+
+Checkpoint binaries and generated datasets stay in ignored local storage. Each
+freeze records their paths, sizes, and SHA-256 hashes so a local artifact can be
+verified without committing multi-gigabyte files.

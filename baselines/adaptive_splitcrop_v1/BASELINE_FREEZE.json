@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "baseline_id": "faithful-mano-adaptive-splitcrop-v1",
+  "display_name": "Faithful MANO Adaptive Split-Hand Crop Baseline v1",
+  "created_utc": "2026-09-04T02:22:30Z",
+  "evaluation_scope": "visual/system baseline; in-domain seen-eval derived from training sequences",
+  "git": {
+    "training_commit": "3b299332fded18066753ca039d5bf17ff3f14427",
+    "branch": "agent/reproduce-hugg-aria-sam2",
+    "worktree_status_at_freeze": []
+  },
+  "data": {
+    "subject_count": 9,
+    "sequence_count": 136,
+    "source_train_frame_count": 393684,
+    "adaptive_train_record_count": 524917,
+    "seen_eval_record_count": 183,
+    "train_manifest": "data/derived/hugg_aria_diffusion/adaptive_hand_crop_v1/train_manifest.jsonl",
+    "train_manifest_sha256": "00deaa5e0e657ba2312a3c2e49f2174805c4dcb71e4ee36eb10f8899ec4ca9c9",
+    "seen_eval_manifest": "data/derived/hugg_aria_diffusion/adaptive_hand_crop_v1/seen_eval_manifest.jsonl",
+    "seen_eval_manifest_sha256": "a096087f23ed7e490e9df2adc819f4f52a96fc7a69b9a7f388c2839f32368409",
+    "manifest_summary_sha256": "a9726b87dc7fb7a58215a643c37e68671c2cc269333eff92f2e7dfc402fc3ea9",
+    "base_asset_index": "baselines/faithful_mano_v2/ASSET_SHA256SUMS.jsonl",
+    "crop_policy": "split disjoint hands into independent 1.5x square crops; use one 1.2x crop for nearby or touching hands"
+  },
+  "configuration": {
+    "path": "configs/hand_restoration/hugg_aria_glove2hand_faithful_mano_adaptive_splitcrop_v1.json",
+    "sha256": "624fcf3abff1b506279860be5e2fb1ce69e6e58256a03bb40adb23cdf03c3b46",
+    "render_kind": "mano",
+    "conditioning_mode": "latent_mask",
+    "spatial_mode": "mano_adaptive_hand_crop",
+    "single_hand_scale": 1.5,
+    "close_joint_scale": 1.2,
+    "hand_loss_weight": 10.0,
+    "batch_size_per_gpu": 32,
+    "world_size": 8,
+    "effective_batch_size": 256,
+    "learning_rate": 0.000005,
+    "epochs": 10,
+    "inference": {
+      "steps": 20,
+      "guidance_scale": 1.0,
+      "controlnet_scale": 1.0
+    }
+  },
+  "training_result": {
+    "optimizer_steps": 15380,
+    "elapsed_hours": 5.3992469397,
+    "final_train_loss_ema": 0.0773888447,
+    "final_validation_loss": 0.0850722192,
+    "final_validation_hand_region_loss": 0.10701035,
+    "final_validation_background_region_loss": 0.0288722569,
+    "checkpoint": "outputs/hand_restoration/hugg_aria_glove2hand_faithful_mano_adaptive_splitcrop_v1/controlnet_final.pt",
+    "checkpoint_size_bytes": 1442692091,
+    "checkpoint_sha256": "76a9a0243700388b20cffed5d0b8cf3f4bf5e32ebaa3a7a8a257149fd509e1e3",
+    "exact_resume_state": "outputs/hand_restoration/hugg_aria_glove2hand_faithful_mano_adaptive_splitcrop_v1/trainer_state_step015380"
+  },
+  "demo": {
+    "contact_sheet": "outputs/hand_restoration/hugg_aria_glove2hand_faithful_mano_adaptive_splitcrop_v1/demos/same10_adaptive_final_cfg1_steps20_seed7_20260902/contact_sheet.jpg",
+    "contact_sheet_sha256": "b8a6cfa20b5db7c999a3aacef1f1c04a7073017a1917b030624d274c7491d1d9",
+    "inference_manifest_sha256": "0bf75f59d32a9d1ba025469302f6acaa894eb66357236b0252e1f9b4438de877"
+  },
+  "environment": {
+    "python": "3.10.20",
+    "torch": "2.11.0+cu128",
+    "cuda": "12.8",
+    "diffusers": "0.39.0",
+    "transformers": "5.14.1",
+    "accelerate": "1.14.0",
+    "gpu": "NVIDIA B200",
+    "gpu_count": 8
+  },
+  "interpretation_guardrails": [
+    "The seen-eval records come from training sequences and do not measure subject or sequence generalization.",
+    "Adaptive cropping changes the sample population, so aggregate validation loss is not a controlled comparison with faithful-mano-baseline-v2.",
+    "This freeze records the reproducible visual/system baseline selected by the project; checkpoint binaries remain in ignored local outputs."
+  ]
+}
