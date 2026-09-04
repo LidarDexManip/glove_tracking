@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "binding": {
+    "dataset": "HOT3D",
+    "subject_id": "P0001",
+    "handedness": "right",
+    "model_id": "hot3d-P0001-right-gaussian-hand-v1"
+  },
+  "pinhole_root": "data/HUGG_ARIA_PINHOLE",
+  "raw_root": "data/raw/hot3d_aria",
+  "sequences": [
+    "P0001_a9d6c83d",
+    "P0001_15c4300c",
+    "P0001_23fa0ee8",
+    "P0001_4bf4e21a",
+    "P0001_624f2ba9",
+    "P0001_9b6feab7"
+  ],
+  "selection_policy": {
+    "status": "initial_audit_policy_not_frozen",
+    "required_qa_masks": [
+      "good_exposure",
+      "hand_pose_available",
+      "hand_visible",
+      "headset_pose_available",
+      "qa_pass"
+    ],
+    "min_hot3d_hand_visibility": 0.8,
+    "min_mano_inside_image": 0.98,
+    "min_mano_inside_crop": 0.995,
+    "min_visible_mano_silhouette_ratio": 0.9,
+    "max_raw_object_bbox_overlap_proxy": 0.05,
+    "min_projected_hand_area_fraction": 0.01,
+    "reject_blur_and_exposure_outliers": true,
+    "require_manual_diverse_contact_sheet_review": true
+  },
+  "crop": {
+    "shape": "square",
+    "scale_around_projected_mano": 1.35,
+    "output_size": 1024,
+    "update_pinhole_intrinsics": true
+  },
+  "split_policy": {
+    "unit": "contiguous_temporal_window",
+    "neighbor_frames_may_not_cross_splits": true
+  }
+}
