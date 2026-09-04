@@ -198,4 +198,14 @@ accelerate launch --num_processes 1 --num_machines 1 --dynamo_backend no \
 
 The formal default is 512x512, physical batch 32, no gradient accumulation, BF16, learning rate `2e-5`, cosine decay with 1,000 warmup steps and 20 complete dataset epochs. The actual optimizer steps per epoch are `ceil(train_samples / 32)`; the trainer prints this after reading the manifest. Validation is a fixed seed-7 subset of up to 2,048 holdout samples, in fixed order, once per epoch. Checkpoints are saved every two epochs. If batch 32 does not fit, lower only `batch_size` and `validation_batch_size` first; if much more memory is available, benchmark 48 and 64 rather than assuming larger batches improve generalization. Increasing batch size increases throughput but reduces optimizer updates per epoch, so compare by both epochs and optimizer steps.
 
-Resume works with the same command plus `--resume outputs/.../controlnet_stepNNNNNN.pt`. A checkpoint contains ControlNet weights and its global step, not optimizer/scheduler state; the resumed run therefore starts a fresh optimizer/scheduler schedule for the configured number of additional epochs.
+Two resume modes are supported. Passing `--resume outputs/.../controlnet_stepNNNNNN.pt`
+performs a weights-only warm start and starts a fresh optimizer/scheduler for
+the number of epochs in the selected config. Passing
+`--resume outputs/.../trainer_state_stepNNNNNN` performs exact continuation:
+model, AdamW moments, scheduler/scaler, per-rank RNG, loss EMA, epoch and next
+batch are restored, and training stops at the original configured target.
+Exact resume requires the same config, dataset ordering, batch geometry and
+number of processes. Full states are enabled by default and
+`training.full_state_keep_last` controls retention; set
+`training.save_full_state=false` only when weights-only checkpoints are
+sufficient.

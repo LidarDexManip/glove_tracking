@@ -14,6 +14,7 @@ from .conditions import ConditionConfig
 from .data_config import resolve_clip_splits
 from .diffusion import ControlNetHandRestorer, DiffusionConfig
 from .hot3d_dataset import Hot3DSingleFrameDataset
+from .hugg_aria_conditioning import paste_crop_with_mask
 from .visualize import rgb_float_to_u8, save_debug_grid
 
 
@@ -28,6 +29,7 @@ class InferenceResult:
     generated_psnr_masked: float
     psnr_full: float
     psnr_masked: float
+    restored_full: np.ndarray | None = None
 
 
 def psnr(pred: np.ndarray, target: np.ndarray, mask: np.ndarray | None = None) -> float:
@@ -89,9 +91,26 @@ def load_sample(
     return sample
 
 
-def build_restorer(config: dict, device: str | torch.device | None = None) -> ControlNetHandRestorer:
-    selected_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    return ControlNetHandRestorer(DiffusionConfig(**config.get("model", {})), device=selected_device)
+def build_restorer(
+    config: dict,
+    device: str | torch.device | None = None,
+) -> ControlNetHandRestorer:
+    selected_device = torch.device(
+        device or ("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    restorer = ControlNetHandRestorer(
+        DiffusionConfig(**config.get("model", {})),
+        device=selected_device,
+    )
+    for module in (
+        restorer.vae,
+        restorer.text_encoder,
+        restorer.unet,
+        restorer.controlnet,
+    ):
+        module.to(selected_device)
+    restorer.controlnet.eval()
+    return restorer
 
 
 def run_inference(
@@ -106,6 +125,11 @@ def run_inference(
     generated = np.asarray(
         restorer.generate(
             sample["condition_rgb"].unsqueeze(0),
+            condition_mask=(
+                sample["condition_mask"].unsqueeze(0)
+                if "condition_mask" in sample
+                else None
+            ),
             steps=steps or inference_config.get("steps", 30),
             guidance_scale=inference_config.get("guidance_scale", 5.0),
             controlnet_scale=inference_config.get("controlnet_scale", 1.0),
@@ -115,6 +139,14 @@ def run_inference(
     edit_mask = (sample["edit_mask_np"] > 0)[..., None]
     restored = np.where(edit_mask, generated, sample["condition_rgb_np"])
     target = sample["target_rgb_np"]
+    restored_full = None
+    if "full_condition_rgb_np" in sample and "crop_box" in sample:
+        restored_full, _ = paste_crop_with_mask(
+            sample["full_condition_rgb_np"],
+            generated,
+            sample["edit_mask_np"],
+            sample["crop_box"],
+        )
     return InferenceResult(
         generated=generated,
         restored=restored,
@@ -122,6 +154,7 @@ def run_inference(
         generated_psnr_masked=psnr(generated, target, sample["edit_mask_np"]),
         psnr_full=psnr(restored, target),
         psnr_masked=psnr(restored, target, sample["edit_mask_np"]),
+        restored_full=restored_full,
     )
 
 
@@ -178,6 +211,8 @@ def save_checkpoint_result(
     result_dir.mkdir(parents=True, exist_ok=True)
     save_rgb(result_dir / "generated.png", result.generated)
     save_rgb(result_dir / "restored.png", result.restored)
+    if result.restored_full is not None:
+        save_rgb(result_dir / "restored_full.png", result.restored_full)
     metrics = {
         "checkpoint": str(checkpoint.resolve()),
         "generated_psnr_full_db": result.generated_psnr_full,
