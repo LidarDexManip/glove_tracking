@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "binding": {
+    "dataset": "HOT3D",
+    "subject_id": "P0001",
+    "handedness": "right",
+    "model_id": "hot3d-P0001-right-gaussian-hand-v1"
+  },
+  "audit": {
+    "version": "v3",
+    "candidates": 35580,
+    "accepted": 1251,
+    "rejected": {
+      "visible_completeness": 21278,
+      "mano_outside_image": 8078,
+      "object_bbox_overlap": 3272,
+      "hand_too_small": 1209,
+      "mano_outside_crop": 492
+    },
+    "splits": {
+      "train": 904,
+      "val": 230,
+      "test": 117
+    },
+    "audit_manifest_sha256": "1cdfd55fa618d0a6e6e74fbbf3e1d39114f22b8eccd545b8627e103eb867024a",
+    "dataset_manifest_sha256": "a16122d843584d3ebd9a42766ee6692b54b32c938b7b5c723efac0d3a41ae2aa",
+    "contact_sheet_sha256": "62d0a82424182dc6a053c4b3ad36d1155df51d3cbdfd942a411851b2c258fc74"
+  },
+  "mano_equivalence": {
+    "mean_vertex_error_m": 2.1576129327627314e-08,
+    "max_vertex_error_m": 7.028863535651908e-08
+  },
+  "benchmark": {
+    "resolution": 512,
+    "steps": 1200,
+    "gaussians": 6152,
+    "warm_seconds_per_step": 0.020420213772201993,
+    "elapsed_seconds": 25.020676600004663,
+    "stable_across_canonical_start": true,
+    "adaptive_cycles": 2,
+    "checkpoint_sha256": "c7a08468ef99767609865bfdd1987a4bdcabdef1844c39b176e89a858a06cd58"
+  },
+  "full_run_estimate": {
+    "steps": 120000,
+    "gpu": "1x NVIDIA B200",
+    "raw_optimization_minutes": 40.84,
+    "budgeted_wall_minutes": [
+      50,
+      70
+    ],
+    "gpu_memory_gib_upper_budget": 2,
+    "additional_storage_gib_upper_budget": 0.25
+  },
+  "full_training_started": false
+}

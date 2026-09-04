@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "model_id": "hot3d-P0001-right-gaussian-hand-v1",
+  "dataset_root": "outputs/gaussian_hand/P0001_right/dataset_v3",
+  "mano_model": "mano_v1_2/models/MANO_RIGHT.pkl",
+  "resolution": 512,
+  "steps": 120000,
+  "gaussians_per_face": 4,
+  "normal_offset_max_m": 0.003,
+  "learning_rates": {
+    "surface": 0.0005,
+    "albedo": 0.0025,
+    "opacity": 0.001,
+    "canonical_mesh": 1e-05,
+    "lighting": 0.0001,
+    "pose_delta": 5e-05
+  },
+  "loss": {
+    "dssim_weight": 0.2,
+    "alpha_weight": 0.1,
+    "distortion_weight": 0.0001
+  },
+  "checkpoint_every": 5000,
+  "validate_every": 5000,
+  "paper_facts": {
+    "iterations": 120000,
+    "reported_a100_80gb_hours": 12,
+    "reported_convergence_hours": 6,
+    "objective": "image reconstruction only"
+  },
+  "reproduction_assumptions": [
+    "four initial Gaussians per MANO face",
+    "degree-2 real SH and a 2x128 pose-lighting MLP",
+    "L1 plus DSSIM, alpha reconstruction, and 2DGS distortion",
+    "learning rates because the paper does not publish them",
+    "canonical mesh refinement starts at step 1000 for numerical stability"
+  ],
+  "canonical_mesh_start_step": 1000,
+  "validation_frames": 32
+}

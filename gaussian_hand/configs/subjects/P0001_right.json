@@ -9,15 +9,25 @@
   "pinhole_root": "data/HUGG_ARIA_PINHOLE",
   "raw_root": "data/raw/hot3d_aria",
   "sequences": [
-    "P0001_a9d6c83d",
+    "P0001_10a27bf7",
     "P0001_15c4300c",
     "P0001_23fa0ee8",
     "P0001_4bf4e21a",
+    "P0001_550ea2ac",
     "P0001_624f2ba9",
-    "P0001_9b6feab7"
+    "P0001_83b755aa",
+    "P0001_8d136980",
+    "P0001_95eabc0a",
+    "P0001_9b6feab7",
+    "P0001_9c030609",
+    "P0001_a68492d5",
+    "P0001_a9d6c83d",
+    "P0001_b2bcbe28",
+    "P0001_f6cc0cc8",
+    "P0001_f71fc9b1"
   ],
   "selection_policy": {
-    "status": "initial_audit_policy_not_frozen",
+    "status": "frozen_v1",
     "required_qa_masks": [
       "good_exposure",
       "hand_pose_available",
@@ -37,11 +47,38 @@
   "crop": {
     "shape": "square",
     "scale_around_projected_mano": 1.35,
-    "output_size": 1024,
+    "output_size": 512,
     "update_pinhole_intrinsics": true
   },
   "split_policy": {
     "unit": "contiguous_temporal_window",
-    "neighbor_frames_may_not_cross_splits": true
+    "neighbor_frames_may_not_cross_splits": true,
+    "train_sequences": [
+      "P0001_10a27bf7",
+      "P0001_23fa0ee8",
+      "P0001_550ea2ac",
+      "P0001_624f2ba9",
+      "P0001_83b755aa",
+      "P0001_8d136980",
+      "P0001_95eabc0a",
+      "P0001_9b6feab7",
+      "P0001_9c030609",
+      "P0001_a68492d5",
+      "P0001_a9d6c83d",
+      "P0001_b2bcbe28",
+      "P0001_f6cc0cc8",
+      "P0001_f71fc9b1"
+    ],
+    "validation_sequences": [
+      "P0001_15c4300c"
+    ],
+    "test_sequences": [
+      "P0001_4bf4e21a"
+    ]
+  },
+  "sampling": {
+    "audit_mask_downsample": 4,
+    "minimum_frame_gap": 1,
+    "reason": "retain adjacent video frames as genuine micro-baseline views, matching video fitting"
   }
 }
