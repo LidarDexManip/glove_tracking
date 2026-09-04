@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
 import json
 import subprocess
@@ -49,6 +50,13 @@ def world_to_camera(calibration,provider,timestamp):
     dc=np.asarray(calibration["T_device_camera"],np.float64)
     return np.linalg.inv(wd@dc)
 
+def nearest_right_pose(timestamps,hands,timestamp):
+    index=bisect.bisect_left(timestamps,timestamp)
+    choices=[i for i in (index-1,index) if 0 <= i < len(timestamps)]
+    if not choices:return None
+    best=min(choices,key=lambda i:abs(timestamps[i]-timestamp))
+    return hands[best] if abs(timestamps[best]-timestamp) <= TOLERANCE_NS else None
+
 def ffmpeg_rgb(path,size,fps):
     return subprocess.Popen(["ffmpeg","-y","-loglevel","error","-f","rawvideo",
         "-pix_fmt","rgb24","-s",f"{size}x{size}","-r",str(fps),"-i","-",
@@ -71,17 +79,21 @@ def main():
     betas=state["subject_betas"][0].to(args.device)
     model=GaussianHand(str(ROOT/config["mano_model"]),betas,
         int(config["gaussians_per_face"]),float(config["normal_offset_max_m"])).to(args.device)
-    model.load_state_dict(state);model.eval()
+    model.load_resizable_state_dict(state);model.eval()
 
     source=args.pinhole_root/args.sequence
     with (source/"frame_timestamps_214_1.csv").open(newline="") as f:
         timestamps=[int(row["timestamp_ns"]) for row in csv.DictReader(f)]
     with (source/"frame_pinhole_calibration_214_1.jsonl").open() as f:
         calibrations=[json.loads(line) for line in f if line.strip()]
-    poses={}
+    pose_items=[]
     with (source/"mano_hand_pose_trajectory.jsonl").open() as f:
         for line in f:
-            item=json.loads(line);poses[int(item["timestamp_ns"])]=item["hand_poses"].get("1")
+            item=json.loads(line)
+            pose_items.append((int(item["timestamp_ns"]),item["hand_poses"].get("1")))
+    pose_items.sort(key=lambda item:item[0])
+    pose_timestamps=[item[0] for item in pose_items]
+    pose_hands=[item[1] for item in pose_items]
     headset=load_headset_pose_provider_from_csv(str(source/"headset_trajectory.csv"))
     stop=(min(len(timestamps),args.start_frame+args.max_frames)
           if args.max_frames else len(timestamps))
@@ -94,7 +106,8 @@ def main():
     try:
         for frame_index in range(args.start_frame,stop):
             timestamp,calibration=timestamps[frame_index],calibrations[frame_index]
-            hand=poses.get(timestamp);tcw=world_to_camera(calibration,headset,timestamp)
+            hand=nearest_right_pose(pose_timestamps,pose_hands,timestamp)
+            tcw=world_to_camera(calibration,headset,timestamp)
             rgb,alpha=blank_rgb,blank_alpha;record={"frame_index":frame_index,
                 "timestamp_ns":timestamp,"mano_valid":False}
             if hand is not None and tcw is not None:
@@ -136,7 +149,8 @@ def main():
     summary={"format_version":1,"model_id":config["model_id"],
         "checkpoint":str(args.checkpoint),"sequence":args.sequence,
         "total_frames":count,"rendered_mano_frames":valid_count,
-        "frame_alignment":"output_frame_index_equals_source_frame_index",
+        "source_start_frame":args.start_frame,
+        "frame_alignment":"manifest stores source frame_index; output frame 0 maps to source_start_frame",
         "crop_semantics":"per-frame 1.35x projected learnable MANO square"}
     (args.output/"summary.json").write_text(json.dumps(summary,indent=2)+"\n")
     print(json.dumps(summary,indent=2))

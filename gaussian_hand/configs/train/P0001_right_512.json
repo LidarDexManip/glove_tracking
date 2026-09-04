@@ -29,12 +29,19 @@
     "objective": "image reconstruction only"
   },
   "reproduction_assumptions": [
-    "four initial Gaussians per MANO face",
+    "four initial Gaussians per MANO face, then gradient-driven adaptive split/prune up to 20k",
     "degree-2 real SH and a 2x128 pose-lighting MLP",
     "L1 plus DSSIM, alpha reconstruction, and 2DGS distortion",
     "learning rates because the paper does not publish them",
     "canonical mesh refinement starts at step 1000 for numerical stability"
   ],
   "canonical_mesh_start_step": 1000,
-  "validation_frames": 32
+  "validation_frames": 32,
+  "adaptive_control": {
+    "every": 5000,
+    "split_fraction": 0.05,
+    "max_gaussians": 20000,
+    "prune_start_step": 10000,
+    "opacity_prune_threshold": 0.02
+  }
 }

@@ -32,7 +32,7 @@ def arguments():
     parser.add_argument("--seed",type=int,default=20260904)
     parser.add_argument("--log-every",type=int,default=10)
     parser.add_argument("--checkpoint-every",type=int,default=None)
-    parser.add_argument("--adaptive-every",type=int,default=5000)
+    parser.add_argument("--adaptive-every",type=int,default=None)
     parser.add_argument("--resume",type=Path,default=None)
     return parser.parse_args()
 
@@ -103,6 +103,13 @@ def main():
             json.loads((dataset_root/"frames.jsonl").open().readline())["mano_betas"]),
         int(config["gaussians_per_face"]),float(config["normal_offset_max_m"])).to(device)
     pose_refinement=PoseRefinement(len(dataset)).to(device)
+    resume=None
+    if args.resume is not None:
+        resume=torch.load(args.resume,map_location=device,weights_only=False)
+        if resume.get("model_id") != config["model_id"]:
+            raise ValueError("Resume checkpoint model_id mismatch")
+        model.load_resizable_state_dict(resume["model"])
+        pose_refinement.load_state_dict(resume["pose_refinement"])
     lr=config["learning_rates"]
     optimizer=torch.optim.Adam([
         {"params":[model.barycentric_logits,model.log_scales,model.angles,
@@ -114,12 +121,7 @@ def main():
         {"params":pose_refinement.parameters(),"lr":lr["pose_delta"]},
     ],eps=1e-8)
     start_step=0
-    if args.resume is not None:
-        resume=torch.load(args.resume,map_location=device,weights_only=False)
-        if resume.get("model_id") != config["model_id"]:
-            raise ValueError("Resume checkpoint model_id mismatch")
-        model.load_state_dict(resume["model"])
-        pose_refinement.load_state_dict(resume["pose_refinement"])
+    if resume is not None:
         optimizer.load_state_dict(resume["optimizer"])
         start_step=int(resume["step"])
     args.output.mkdir(parents=True,exist_ok=True)
@@ -127,6 +129,10 @@ def main():
         **config,"steps":steps,"resolution":resolution,"seed":args.seed},indent=2)+"\n")
     checkpoint_every=args.checkpoint_every or int(config["checkpoint_every"])
     started=time.perf_counter(); measured_start=None; measured_steps=0
+    adaptive_every=(args.adaptive_every if args.adaptive_every is not None
+                    else int(config.get("adaptive_control",{}).get("every",0)))
+    gradient_scores=torch.zeros(model.gaussian_count,device=device)
+    gradient_samples=0
     for step in range(start_step+1,steps+1):
         sample=dataset[random.randrange(len(dataset))]
         tensors={k:(v.to(device) if torch.is_tensor(v) else v) for k,v in sample.items()}
@@ -141,6 +147,10 @@ def main():
         optimizer.zero_grad(set_to_none=True); loss.backward()
         if step < int(config.get("canonical_mesh_start_step", 0)):
             model.mano.canonical_delta.grad = None
+        with torch.no_grad():
+            gradient_scores += model.barycentric_logits.grad.norm(dim=-1)
+            gradient_scores += .25 * model.log_scales.grad.norm(dim=-1)
+            gradient_samples += 1
         torch.nn.utils.clip_grad_norm_(
             list(model.parameters()) + list(pose_refinement.parameters()),
             10.0, error_if_nonfinite=True)
@@ -157,9 +167,19 @@ def main():
             torch.cuda.synchronize(device); measured_start=time.perf_counter()
         if step>6:
             measured_steps+=1
-        if args.adaptive_every and step%args.adaptive_every==0:
+        if adaptive_every and step%adaptive_every==0:
+            control=config.get("adaptive_control",{})
+            density=model.adaptive_density_control(
+                optimizer,gradient_scores/max(gradient_samples,1),
+                float(control.get("split_fraction",.05)),
+                int(control.get("max_gaussians",20000)),
+                float(control.get("opacity_prune_threshold",.02)
+                      if step >= int(control.get("prune_start_step",10000)) else 0))
             changed=model.reassign_to_nearest_triangles()
-            print(json.dumps({"step":step,"adaptive_reassigned":changed}),flush=True)
+            print(json.dumps({"step":step,"adaptive_density":density,
+                              "adaptive_reassigned":changed}),flush=True)
+            gradient_scores=torch.zeros(model.gaussian_count,device=device)
+            gradient_samples=0
         if step%args.log_every==0 or step==1:
             elapsed=time.perf_counter()-started
             record={"step":step,"loss":float(loss.detach()),

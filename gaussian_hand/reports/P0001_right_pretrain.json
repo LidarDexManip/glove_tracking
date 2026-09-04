@@ -33,23 +33,30 @@
   "benchmark": {
     "resolution": 512,
     "steps": 1200,
-    "gaussians": 6152,
-    "warm_seconds_per_step": 0.020420213772201993,
-    "elapsed_seconds": 25.020676600004663,
+    "gaussians_initial": 6152,
+    "gaussians_final": 11040,
+    "accelerated_adaptive_cycles": 12,
+    "warm_seconds_per_step": 0.02189092913401359,
+    "elapsed_seconds": 26.958967277008924,
     "stable_across_canonical_start": true,
-    "adaptive_cycles": 2,
-    "checkpoint_sha256": "c7a08468ef99767609865bfdd1987a4bdcabdef1844c39b176e89a858a06cd58"
+    "adaptive_resume_tested": true,
+    "adaptive_render_tested": true,
+    "checkpoint_sha256": "2e8e98e0ccd938923c4196e2d70904f91679843c41b055194e88833edc26cdc5"
   },
   "full_run_estimate": {
     "steps": 120000,
     "gpu": "1x NVIDIA B200",
-    "raw_optimization_minutes": 40.84,
-    "budgeted_wall_minutes": [
-      50,
-      70
+    "gaussians_cap": 20000,
+    "raw_optimization_minutes": [
+      45,
+      55
     ],
-    "gpu_memory_gib_upper_budget": 2,
-    "additional_storage_gib_upper_budget": 0.25
+    "budgeted_wall_minutes": [
+      60,
+      80
+    ],
+    "gpu_memory_gib_upper_budget": 4,
+    "additional_storage_gib_upper_budget": 0.5
   },
   "full_training_started": false
 }

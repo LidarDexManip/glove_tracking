@@ -75,6 +75,17 @@ class GaussianHand(nn.Module):
         self.normal_offset_max = float(normal_offset_max)
         self.lighting = PoseLighting()
 
+    def load_resizable_state_dict(self, state_dict: dict) -> None:
+        """Load a checkpoint after adaptive control changed Gaussian count."""
+        names=("barycentric_logits","log_scales","angles","opacity_logits",
+               "albedo_logits","normal_offset_logits")
+        for name in names:
+            value=state_dict[name].to(self.subject_betas.device)
+            if tuple(getattr(self,name).shape) != tuple(value.shape):
+                setattr(self,name,nn.Parameter(torch.empty_like(value)))
+        self.face_ids=state_dict["face_ids"].to(self.subject_betas.device).clone()
+        self.load_state_dict(state_dict)
+
     @property
     def gaussian_count(self) -> int:
         return int(self.face_ids.numel())
@@ -139,6 +150,57 @@ class GaussianHand(nn.Module):
         changed=int((new_ids != self.face_ids).sum())
         self.face_ids.copy_(new_ids);self.barycentric_logits.copy_(bary.log())
         return changed
+
+    @torch.no_grad()
+    def adaptive_density_control(self, optimizer: torch.optim.Optimizer,
+                                 scores: torch.Tensor, split_fraction: float,
+                                 max_gaussians: int,
+                                 opacity_threshold: float = 0.02) -> dict:
+        """Split high-gradient surfels and prune transparent ones."""
+        old_count=self.gaussian_count
+        if scores.shape != (old_count,):
+            raise ValueError(f"score shape {scores.shape} != {(old_count,)}")
+        keep=torch.sigmoid(self.opacity_logits) >= opacity_threshold
+        if int(keep.sum()) < max(256,old_count//2):
+            keep=torch.ones_like(keep)
+        capacity=max(0,max_gaussians-int(keep.sum()))
+        split_count=min(capacity,max(1,int(old_count*split_fraction)))
+        eligible=torch.where(keep)[0]
+        if split_count:
+            split=eligible[torch.topk(scores[eligible],min(split_count,len(eligible))).indices]
+        else:
+            split=eligible[:0]
+        base=torch.where(keep)[0]
+        index_map=torch.cat((base,split))
+        old_parameters={}
+        names=("barycentric_logits","log_scales","angles","opacity_logits",
+               "albedo_logits","normal_offset_logits")
+        for name in names:
+            old=getattr(self,name);old_parameters[name]=old
+            values=old.detach()[index_map].clone()
+            if len(split):
+                tail=slice(len(base),None)
+                if name=="log_scales":
+                    values[tail]-=math.log(math.sqrt(2))
+                elif name=="barycentric_logits":
+                    pattern=torch.tensor((.12,-.06,-.06),device=values.device,
+                                         dtype=values.dtype)
+                    values[tail]+=pattern.roll(int(old_count%3))
+            new=nn.Parameter(values)
+            setattr(self,name,new)
+            for group in optimizer.param_groups:
+                group["params"]=[new if item is old else item for item in group["params"]]
+            state=optimizer.state.pop(old,{})
+            resized={}
+            for key,value in state.items():
+                if torch.is_tensor(value) and value.ndim and value.shape[0]==old_count:
+                    resized[key]=value[index_map].clone()
+                else:
+                    resized[key]=value
+            optimizer.state[new]=resized
+        self.face_ids=self.face_ids[index_map].clone()
+        return {"before":old_count,"after":self.gaussian_count,
+                "split":len(split),"pruned":old_count-int(keep.sum())}
 
     def attributes(self, pca: torch.Tensor, wrist_q_wxyz: torch.Tensor,
                    wrist_t_world: torch.Tensor) -> dict[str, torch.Tensor]:

@@ -23,12 +23,13 @@ hot3d-P0001-right-gaussian-hand-v1.
   distortion regularization, validation PSNR, resumable checkpoints, and
   frame-aligned RGB/alpha sequence rendering.
 
-The paper does not publish Gaussian count, SH order/MLP shape, learning rates,
-loss weights, or adaptive schedule, and no official Gaussian training code is
-linked as of 2026-09-04. Those choices are listed as reproduction assumptions in
-configs/train/P0001_right_512.json. Dynamic split/clone densification is not
-claimed: this version starts with dense fixed surface coverage and performs the
-paper's triangle re-assignment. Treat dynamic densification as a later ablation.
+The paper does not publish initial Gaussian count, SH order/MLP shape,
+learning rates, loss weights, or adaptive schedule, and no official Gaussian
+training code is linked as of 2026-09-04. Those choices are listed as
+reproduction assumptions in configs/train/P0001_right_512.json. The implemented
+adaptive control accumulates image-loss gradients, splits high-gradient
+surfels, prunes transparent surfels, preserves Adam state, and then recomputes
+the exact closest-triangle binding.
 
 ## Frozen P0001/right data audit
 
@@ -88,12 +89,13 @@ Resume without resetting optimizer or per-frame pose deltas:
       --output outputs/gaussian_hand/P0001_right/train_120k \
       --resume outputs/gaussian_hand/P0001_right/train_120k/step_060000.pt
 
-A 1,200-step 512px benchmark crossed the canonical-mesh activation point and
-two adaptive cycles without non-finite values. Warm speed was 20.42 ms/step.
-The current fixed-6,152-Gaussian configuration therefore estimates 41 minutes
-of raw optimization and 50-70 minutes including 32-frame validation,
-checkpoints, and variance. Measured device allocation including CUDA setup has
-stayed below 2 GiB. Dataset plus 25 checkpoints should remain below 0.25 GiB.
+A 1,200-step 512px stress benchmark crossed the canonical-mesh activation
+point and compressed 12 adaptive cycles into the run. Gaussian count grew from
+6,152 to 11,040; resume and inference from that resized checkpoint both passed.
+Warm speed was 21.89 ms/step. With the production 5k control interval and a 20k
+cap, 120k steps are estimated at 45-55 minutes of raw optimization and 60-80
+minutes including validation, checkpoints, adaptive control, and variance.
+Budget one B200, up to 4 GiB VRAM, and 0.5 GiB additional disk.
 
 ## Render every MANO frame
 
