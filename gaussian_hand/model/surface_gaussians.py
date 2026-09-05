@@ -235,10 +235,10 @@ class GaussianHand(nn.Module):
         covariance = deformation @ covariance @ deformation.transpose(-1, -2)
         covariance = .5 * (covariance + covariance.transpose(-1, -2))
         a, b, d = covariance[:, 0, 0], covariance[:, 0, 1], covariance[:, 1, 1]
-        discriminant = torch.sqrt((a - d).square() + 4 * b.square() + 1e-12)
+        discriminant = torch.sqrt((a - d).square() + 4 * b.square() + 1e-24)
         eigenvalues = torch.stack(((a + d + discriminant) * .5,
                                    (a + d - discriminant) * .5), -1)
-        theta = .5 * torch.atan2(2 * b, a - d)
+        theta = .5 * torch.atan2(2 * b, a - d + 1e-12)
         cos_theta, sin_theta = theta.cos(), theta.sin()
         eigenvectors = torch.stack((
             torch.stack((cos_theta, -sin_theta), -1),
@@ -258,11 +258,9 @@ class GaussianHand(nn.Module):
         raw_illumination = torch.einsum("nk,nkc->nc", basis, coefficients)
         # A hard non-negative clamp creates a dead SH state: once all channels
         # cross below zero, image gradients can no longer recover lighting.
-        illumination = F.softplus(raw_illumination, beta=5.0)
-        # Multiplication in odds space is bounded, differentiable at both ends,
-        # and is exactly neutral when illumination is one.
-        colors = torch.sigmoid(
-            self.albedo_logits + torch.log(illumination.clamp_min(1e-6)))
+        illumination = F.softplus(raw_illumination) / math.log1p(math.e)
+        # Keep albedo-times-illumination; unclipped training RGB retains gradients.
+        colors = torch.sigmoid(self.albedo_logits) * illumination
         return {
             "means": means, "quats": quaternions, "scales": scales,
             "opacities": torch.sigmoid(self.opacity_logits),

@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 def ssim(x: torch.Tensor, y: torch.Tensor, window: int = 11) -> torch.Tensor:
-    x, y = x.permute(2, 0, 1)[None], y.permute(2, 0, 1)[None]
+    x, y = x.permute(2, 0, 1)[None].contiguous(), y.permute(2, 0, 1)[None].contiguous()
     p = window // 2
     mx, my = F.avg_pool2d(x, window, 1, p), F.avg_pool2d(y, window, 1, p)
     vx = F.avg_pool2d(x.square(), window, 1, p) - mx.square()

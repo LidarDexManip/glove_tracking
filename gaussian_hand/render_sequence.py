@@ -60,13 +60,13 @@ def nearest_right_pose(timestamps,hands,timestamp):
 def ffmpeg_rgb(path,size,fps):
     return subprocess.Popen(["ffmpeg","-y","-loglevel","error","-f","rawvideo",
         "-pix_fmt","rgb24","-s",f"{size}x{size}","-r",str(fps),"-i","-",
-        "-an","-c:v","libx264","-preset","veryfast","-crf","18","-pix_fmt",
+        "-an","-c:v","libx264","-threads","2","-preset","veryfast","-crf","18","-pix_fmt",
         "yuv420p",str(path)],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
 
 def ffmpeg_alpha(path,size,fps):
     return subprocess.Popen(["ffmpeg","-y","-loglevel","error","-f","rawvideo",
         "-pix_fmt","gray","-s",f"{size}x{size}","-r",str(fps),"-i","-",
-        "-an","-c:v","ffv1","-level","3",str(path)],
+        "-an","-c:v","ffv1","-threads","2","-level","3",str(path)],
         stdin=subprocess.PIPE,stderr=subprocess.PIPE)
 
 def main():
@@ -75,6 +75,8 @@ def main():
     expected={"dataset":"HOT3D","subject_id":"P0001","handedness":"right"}
     if checkpoint.get("binding") != expected:
         raise ValueError(f"Checkpoint identity mismatch: {checkpoint.get('binding')}")
+    if not args.sequence.startswith(expected["subject_id"] + "_"):
+        raise ValueError("Requested sequence belongs to a different subject")
     config=checkpoint["config"];state=checkpoint["model"]
     betas=state["subject_betas"][0].to(args.device)
     model=GaussianHand(str(ROOT/config["mano_model"]),betas,

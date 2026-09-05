@@ -21,7 +21,7 @@ def render_gaussian_hand(model, pca: torch.Tensor, wrist_q_wxyz: torch.Tensor,
         scales=attributes["scales"], opacities=attributes["opacities"],
         colors=colors, viewmats=world_to_camera, Ks=intrinsics,
         width=width, height=height, backgrounds=backgrounds,
-        render_mode="RGB", packed=False,
+        render_mode="RGB+D", packed=False, distloss=True,
     )
-    return {"rgb": rgb[0], "alpha": alpha[0], "normals": normals[0],
+    return {"rgb": rgb[0, ..., :3], "alpha": alpha[0], "normals": normals[0],
             "distortion": distort[0], "meta": meta}

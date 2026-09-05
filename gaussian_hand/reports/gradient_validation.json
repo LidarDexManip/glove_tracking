@@ -1,0 +1,12 @@
+{
+  "initial_loss": 0.10636869817972183,
+  "albedo": {
+    "autograd": 0.0011042171390727162,
+    "finite_difference": 0.0011019408702850342
+  },
+  "lightingbias": {
+    "autograd": 0.007047385908663273,
+    "finite_difference": 0.007048249244689941
+  },
+  "fixed_frame_loss_after_200": 0.08427215367555618
+}

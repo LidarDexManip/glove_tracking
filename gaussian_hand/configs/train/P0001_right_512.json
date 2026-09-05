@@ -25,15 +25,16 @@
     "iterations": 120000,
     "reported_a100_80gb_hours": 12,
     "reported_convergence_hours": 6,
-    "objective": "image reconstruction only",
-    "distributed_equivalence": "30k global steps x 4 frames = 120k frame updates"
+    "objective": "image reconstruction only"
   },
   "reproduction_assumptions": [
     "four initial Gaussians per MANO face, then gradient-driven adaptive split/prune up to 20k",
     "degree-2 real SH and a 2x128 pose-lighting MLP",
     "L1 plus DSSIM, alpha reconstruction, and 2DGS distortion",
     "learning rates because the paper does not publish them",
-    "canonical mesh refinement starts at 250 four-GPU steps (1000 frame updates)"
+    "canonical mesh refinement starts at 250 four-GPU steps (1000 frame updates)",
+    "30k optimizer steps with batch four samples 120k frames; not equivalent to 120k optimizer steps",
+    "Normalized softplus SH illumination prevents negative-light dead gradients; RGB remains albedo times illumination"
   ],
   "canonical_mesh_start_step": 250,
   "adaptive_control": {
