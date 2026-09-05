@@ -8,6 +8,37 @@ Identity: **HOT3D / P0001 / right** (`hot3d-P0001-right-gaussian-hand-v1`).
 The diffusion baseline is already merged into local `main` and tagged
 `baseline-adaptive-splitcrop-v1`; this work is on `agent/gaussian-hand-hot3d`.
 
+## Completed experimental baseline
+
+The four-GPU run completed 30,000 optimizer steps in 764 seconds, producing
+19,763 Gaussians. It used all 1,251 selected P0001/right frames. The checkpoint is
+`outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/step_030000.pt` (about 5 MB).
+
+Start visual review with
+[the 18-second comparison video](../outputs/gaussian_hand/P0001_right/previews_v3/comparison.mp4),
+[fixed training-frame comparisons](../outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/visual/step_030000.jpg),
+and [low/medium/high error examples](../outputs/gaussian_hand/P0001_right/appearance_v3/quality_range.jpg).
+All 16 sequences are rendered under `outputs/gaussian_hand/P0001_right/renders_v3`:
+58,820 aligned frames, of which 50,733 contain a visible rendered right hand.
+RGB/alpha video counts and source-frame indices were verified.
+
+All-training raw-MANO appearance metrics: black-background crop PSNR 21.17 dB,
+SAM foreground PSNR 16.71 dB, mean alpha IoU 0.853. These are overfit diagnostics.
+The result has recognizable hand shape and skin color, but fine detail is
+smoothed and large rotations/close-ups can produce stretched or planar wrist
+artifacts. It is an experimental baseline, not a high-fidelity reproduction.
+Possible contributors include forearm pixels in SAM targets, large learned wrist
+surfels, and limited surface/view coverage; these causes have not been isolated.
+
+See `reports/P0001_right_result.json` for provenance, counts and limitations.
+Repeat the full training-set appearance audit with:
+
+```bash
+CUDA_VISIBLE_DEVICES=4 python -m gaussian_hand.evaluate_appearance \
+  --checkpoint outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/step_030000.pt \
+  --output outputs/gaussian_hand/P0001_right/appearance_v3
+```
+
 ## Method and reproduction choices
 
 - Learnable canonical MANO mesh and per-training-frame PCA/wrist pose corrections.

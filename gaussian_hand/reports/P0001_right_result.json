@@ -1,0 +1,63 @@
+{
+  "status": "completed_experimental_baseline",
+  "binding": {
+    "dataset": "HOT3D",
+    "subject_id": "P0001",
+    "handedness": "right"
+  },
+  "training_frames": 1251,
+  "training_split": "all; no held-out data",
+  "training": {
+    "status": "complete",
+    "steps": 30000,
+    "global_frame_updates": 120000,
+    "elapsed_seconds": 764.295607409993,
+    "final_gaussians": 19763
+  },
+  "gpu_indices": [
+    4,
+    5,
+    6,
+    7
+  ],
+  "gpu_window_minutes_approx": 26,
+  "gpu_released": true,
+  "main_training_gpu_hours": 0.8492173415666588,
+  "checkpoint": "outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/step_030000.pt",
+  "checkpoint_sha256": "648cf76e44f0ccfef997d31d3114703e9bcad4eac6dad586cac8774dda82238c",
+  "appearance": {
+    "checkpoint": "outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/step_030000.pt",
+    "frames": 1251,
+    "policy": "all training frames, raw MANO, no held-out evaluation",
+    "black_background_crop_psnr": 21.17084777705002,
+    "sam_foreground_psnr": 16.706448185335816,
+    "mean_alpha_iou": 0.853141826500805
+  },
+  "rendering": {
+    "sequences": 16,
+    "total_frames": 58820,
+    "rendered_mano_frames": 50733,
+    "pose_available_frames": 57412,
+    "blank_reasons": {
+      "missing_hand_pose": 1408,
+      "out_of_view": 6679
+    },
+    "elapsed_seconds": 142.1750726439932,
+    "all_video_frame_counts_verified": true,
+    "all_source_frame_indices_verified": true
+  },
+  "preview": "outputs/gaussian_hand/P0001_right/previews_v3/comparison.mp4",
+  "limitations": [
+    "Fine skin detail is smoothed; not photorealistic quality",
+    "Large palm rotations and close-up views can show wrist stretching or planar artifacts",
+    "SAM includes forearm but the mesh is MANO hand; large learned wrist surfels and sparse viewpoint coverage are possible contributors, not independently isolated causes",
+    "Geometric visibility and object bbox filters do not guarantee zero occlusion",
+    "All evaluation images are training data and inference uses raw MANO without fitted pose corrections",
+    "Paper hyperparameters are incompletely specified; implementation choices are documented in the config and README"
+  ],
+  "tests": {
+    "full_suite_cpu_passed": 42,
+    "cuda_specific_test_skipped_in_cpu_suite": 1,
+    "cuda_gradient_regression_and_finite_difference": "passed separately"
+  }
+}
