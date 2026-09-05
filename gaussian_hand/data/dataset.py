@@ -11,7 +11,9 @@ class GaussianHandDataset(Dataset):
     def __init__(self, root: str | Path, split: str = "train", resolution: int | None = None):
         self.root = Path(root)
         records = [json.loads(line) for line in (self.root / "frames.jsonl").open()]
-        self.records = [r for r in records if r["split"] == split]
+        self.records = records if split == "all" else [
+            r for r in records if r["split"] == split
+        ]
         if not self.records:
             raise ValueError(f"No {split} records in {self.root}")
         self.resolution = resolution

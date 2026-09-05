@@ -51,11 +51,13 @@
     "update_pinhole_intrinsics": true
   },
   "split_policy": {
-    "unit": "contiguous_temporal_window",
-    "neighbor_frames_may_not_cross_splits": true,
+    "unit": "subject_overfit_all_sequences",
+    "neighbor_frames_may_not_cross_splits": false,
     "train_sequences": [
       "P0001_10a27bf7",
+      "P0001_15c4300c",
       "P0001_23fa0ee8",
+      "P0001_4bf4e21a",
       "P0001_550ea2ac",
       "P0001_624f2ba9",
       "P0001_83b755aa",
@@ -69,12 +71,8 @@
       "P0001_f6cc0cc8",
       "P0001_f71fc9b1"
     ],
-    "validation_sequences": [
-      "P0001_15c4300c"
-    ],
-    "test_sequences": [
-      "P0001_4bf4e21a"
-    ]
+    "validation_sequences": [],
+    "test_sequences": []
   },
   "sampling": {
     "audit_mask_downsample": 4,

@@ -4,7 +4,7 @@ Independent, subject-bound reproduction of the Gaussian Hand stage described by
 Glove2Hand. This package does not import code or checkpoints from the old
 external/bare-hand_gaussian_reconstruction directory.
 
-Status: **training-ready; the 120k-step run has intentionally not started**.
+Status: **four-GPU overfit configuration validated and ready to launch**.
 The selected identity is HOT3D / P0001 / right, model id
 hot3d-P0001-right-gaussian-hand-v1.
 
@@ -42,16 +42,18 @@ QA/SAM eligibility and all of:
 - at least 99.5% of MANO vertices inside a 1.35x square crop;
 - no reprojected HOT3D object bbox overlapping more than 5% of the MANO bbox.
 
-Of 35,580 candidates, 1,251 passed. The sequence-disjoint split is 904 train,
-230 validation, and 117 test. Crops are 512x512, and the pinhole intrinsics are
-updated with pixel-centre-correct crop/resize math. The final contact sheet was
+Of 35,580 candidates, 1,251 passed. For subject-specific reconstruction all
+1,251 accepted frames are training data: there is no held-out split, and quality
+is judged by fixed-frame visual galleries plus final frame-aligned renders.
+Crops are 512x512, and the pinhole intrinsics are updated with pixel-centre-
+correct crop/resize math. The final contact sheet was
 reviewed after the object gate; obvious held-object examples present in v1 are
 absent in v3.
 
 Versioned generated data (on the /data-backed outputs symlink):
 
 - outputs/gaussian_hand/P0001_right/audit_v3/frames.jsonl
-- outputs/gaussian_hand/P0001_right/dataset_v3/frames.jsonl
+- outputs/gaussian_hand/P0001_right/dataset_all_v4/frames.jsonl
 - outputs/gaussian_hand/P0001_right/dataset_v3/contact_sheet.jpg
 
 ## Environment
@@ -76,26 +78,23 @@ datasets, and checkpoints on /data; the system filesystem is 98% full.
       --manifest outputs/gaussian_hand/P0001_right/audit_v3/frames.jsonl \
       --output outputs/gaussian_hand/P0001_right/dataset_v3
 
-## Train (only after explicit approval)
+## Four-GPU subject overfit
 
-    CUDA_VISIBLE_DEVICES=0 python -m gaussian_hand.train \
-      --config gaussian_hand/configs/train/P0001_right_512.json \
-      --output outputs/gaussian_hand/P0001_right/train_120k
+Four synchronous GPU workers process distinct frames and average gradients. The
+30k global steps therefore equal 120k frame updates, matching the original
+single-frame iteration budget while reducing wall time.
 
-Resume without resetting optimizer or per-frame pose deltas:
+    CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.run       --standalone --nproc-per-node=4 -m gaussian_hand.train       --config gaussian_hand/configs/train/P0001_right_512.json       --output outputs/gaussian_hand/P0001_right/train_4gpu_30k
 
-    CUDA_VISIBLE_DEVICES=0 python -m gaussian_hand.train \
-      --config gaussian_hand/configs/train/P0001_right_512.json \
-      --output outputs/gaussian_hand/P0001_right/train_120k \
-      --resume outputs/gaussian_hand/P0001_right/train_120k/step_060000.pt
+Resume without resetting optimizer, adaptive Gaussian count, or pose deltas:
 
-A 1,200-step 512px stress benchmark crossed the canonical-mesh activation
-point and compressed 12 adaptive cycles into the run. Gaussian count grew from
-6,152 to 11,040; resume and inference from that resized checkpoint both passed.
-Warm speed was 21.89 ms/step. With the production 5k control interval and a 20k
-cap, 120k steps are estimated at 45-55 minutes of raw optimization and 60-80
-minutes including validation, checkpoints, adaptive control, and variance.
-Budget one B200, up to 4 GiB VRAM, and 0.5 GiB additional disk.
+    CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.run       --standalone --nproc-per-node=4 -m gaussian_hand.train       --config gaussian_hand/configs/train/P0001_right_512.json       --output outputs/gaussian_hand/P0001_right/train_4gpu_30k       --resume outputs/gaussian_hand/P0001_right/train_4gpu_30k/step_015000.pt
+
+Manual gradient all-reduce is used instead of static DDP so adaptive Gaussian
+parameter resizing remains valid. A four-GPU smoke test passed synchronized
+optimization, adaptive split, gallery creation, checkpointing, and resume.
+Measured warm speed was about 28 ms/global-step at low Gaussian count. Budget
+20-30 minutes on four B200s, up to 4 GiB VRAM per rank, and 0.5 GiB disk.
 
 ## Render every MANO frame
 
@@ -104,7 +103,7 @@ Frames without a right-hand MANO pose, camera pose, or any in-image hand are
 blank but remain aligned.
 
     CUDA_VISIBLE_DEVICES=0 python -m gaussian_hand.render_sequence \
-      --checkpoint outputs/gaussian_hand/P0001_right/train_120k/step_120000.pt \
+      --checkpoint outputs/gaussian_hand/P0001_right/train_4gpu_30k/step_030000.pt \
       --sequence P0001_a9d6c83d \
       --output outputs/gaussian_hand/P0001_right/renders/P0001_a9d6c83d
 
