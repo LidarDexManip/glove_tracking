@@ -204,6 +204,12 @@ def main():
         resume = torch.load(args.resume, map_location=device, weights_only=False)
         if resume.get("model_id") != config["model_id"]:
             raise ValueError("Resume checkpoint model_id mismatch")
+        current_manifest_hash = hashlib.sha256(
+            (dataset_root / "frames.jsonl").read_bytes()).hexdigest()
+        if resume.get("manifest_sha256") != current_manifest_hash:
+            raise ValueError("Resume dataset manifest/order mismatch")
+        if resume["config"].get("training_split", "train") != config.get("training_split", "train"):
+            raise ValueError("Resume training split mismatch")
         if int(resume.get("distributed_world_size", world_size)) != world_size:
             raise ValueError("Resume checkpoint world-size mismatch")
         model.load_resizable_state_dict(resume["model"])

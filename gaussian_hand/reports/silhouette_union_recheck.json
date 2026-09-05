@@ -1,0 +1,12 @@
+{
+  "method": "independent per-triangle union in crop at 256px, with resized SAM mask",
+  "frames": 1251,
+  "pass_0_90": 1251,
+  "minimum": 0.9074324324324324,
+  "quantiles": [
+    0.9208711239045149,
+    0.9451118338089866,
+    0.9736058341091769
+  ],
+  "below_threshold": []
+}

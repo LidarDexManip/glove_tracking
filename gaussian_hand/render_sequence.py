@@ -111,7 +111,10 @@ def main():
             hand=nearest_right_pose(pose_timestamps,pose_hands,timestamp)
             tcw=world_to_camera(calibration,headset,timestamp)
             rgb,alpha=blank_rgb,blank_alpha;record={"frame_index":frame_index,
-                "timestamp_ns":timestamp,"mano_valid":False}
+                "timestamp_ns":timestamp,"mano_valid":False,
+                "pose_available":hand is not None,"camera_available":tcw is not None,
+                "blank_reason":("missing_hand_pose" if hand is None else
+                                "missing_camera_pose" if tcw is None else "out_of_view")}
             if hand is not None and tcw is not None:
                 with torch.no_grad():
                     pca=torch.tensor(hand["pose"],device=args.device)
@@ -125,7 +128,7 @@ def main():
                     in_image=((z>.01)&(uv[:,0]>=0)&(uv[:,0]<width)&
                               (uv[:,1]>=0)&(uv[:,1]<height))
                     box=square_crop(uv[z>.01],width,height,1.35)
-                    if box is not None and in_image.mean() >= .05:
+                    if box is not None and in_image.any():
                         ck=crop_intrinsics(k,box,args.size)
                         out=render_gaussian_hand(model,pca,q,t,
                             torch.tensor(tcw,device=args.device,dtype=torch.float32),
@@ -133,7 +136,7 @@ def main():
                             args.size,args.size)
                         rgb=(out["rgb"].clamp(0,1).cpu().numpy()*255).astype(np.uint8)
                         alpha=(out["alpha"][...,0].clamp(0,1).cpu().numpy()*255).astype(np.uint8)
-                        record.update({"mano_valid":True,"crop_xyxy":list(box),
+                        record.update({"mano_valid":True,"blank_reason":None,"crop_xyxy":list(box),
                                        "crop_intrinsics":ck.tolist()});valid_count+=1
             rgb_encoder.stdin.write(np.ascontiguousarray(rgb).tobytes())
             alpha_encoder.stdin.write(np.ascontiguousarray(alpha).tobytes())

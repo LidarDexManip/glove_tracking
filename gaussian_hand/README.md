@@ -1,110 +1,126 @@
 # Gaussian Hand
 
-Independent, subject-bound reproduction of the Gaussian Hand stage described by
-Glove2Hand. This package does not import code or checkpoints from the old
-external/bare-hand_gaussian_reconstruction directory.
+Independent, subject-bound implementation of the Gaussian Hand stage in
+[Glove2Hand](https://arxiv.org/abs/2603.20850). It does not import the old
+`external/bare-hand_gaussian_reconstruction` code or checkpoints.
 
-Status: **four-GPU overfit configuration validated and ready to launch**.
-The selected identity is HOT3D / P0001 / right, model id
-hot3d-P0001-right-gaussian-hand-v1.
+Identity: **HOT3D / P0001 / right** (`hot3d-P0001-right-gaussian-hand-v1`).
+The diffusion baseline is already merged into local `main` and tagged
+`baseline-adaptive-splitcrop-v1`; this work is on `agent/gaussian-hand-hot3d`.
 
-## What is implemented
+## Method and reproduction choices
 
-- A learnable canonical MANO mesh, verified against the official HOT3D provider
-  to 0.000000071 m maximum vertex error before canonical correction.
-- Four 2D Gaussian surfels per MANO triangle (6,152 total), with learned
-  barycentric coordinates, in-plane scale/rotation, opacity, albedo, and bounded
-  normal offset.
-- Triangle deformation-gradient transport of the local ellipse.
-- Exact point-to-triangle adaptive re-assignment after canonical mesh updates.
-- Pose-conditioned degree-2 SH lighting with separate palm/back branches.
-- Learnable per-training-frame MANO PCA, wrist rotation, and translation deltas.
-- Differentiable gsplat 2DGS rasterization, image/alpha reconstruction,
-  distortion regularization, validation PSNR, resumable checkpoints, and
-  frame-aligned RGB/alpha sequence rendering.
+- Learnable canonical MANO mesh and per-training-frame PCA/wrist pose corrections.
+  Unmodified MANO vertices match the official HOT3D provider within 7.1e-8 m.
+- Triangle-bound 2D Gaussians with barycentric locations, bounded normal offsets,
+  albedo, opacity, anisotropic scales and in-plane rotations.
+- Triangle deformation-gradient transport of covariance; gradient-based Gaussian
+  splitting/pruning and closest-triangle rebinding.
+- Pose-conditioned palm/back SH illumination, multiplied by learned albedo.
+- Differentiable gsplat 2DGS and calibrated pinhole crop rendering.
 
-The paper does not publish initial Gaussian count, SH order/MLP shape,
-learning rates, loss weights, or adaptive schedule, and no official Gaussian
-training code is linked as of 2026-09-04. Those choices are listed as
-reproduction assumptions in configs/train/P0001_right_512.json. The implemented
-adaptive control accumulates image-loss gradients, splits high-gradient
-surfels, prunes transparent surfels, preserves Adam state, and then recomputes
-the exact closest-triangle binding.
+The paper does not specify all implementation hyperparameters. Four surfels per
+face (6,152 initially), degree-2 SH, a 2x128 lighting MLP, loss weights, learning
+rates, bounds and adaptive schedules are our reproduction choices, recorded in
+`configs/train/P0001_right_512.json`. Lighting uses MANO PCA plus wrist translation
+as its MLP input, and normalized softplus keeps illumination positive. These
+choices should not be described as the authors' released implementation.
 
-## Frozen P0001/right data audit
+The objective combines RGB L1, local SSIM, alpha L1 and weak depth distortion.
+Distortion uses an actual depth channel (`RGB+D`), not the blue RGB channel.
+A CUDA finite-difference check caught incorrect `avg_pool2d` gradients on strided
+NCHW images in this environment; SSIM now explicitly makes images contiguous.
+The regression test and `reports/gradient_validation.json` record the check.
 
-All 16 available P0001 pinhole sequences were audited. A frame must pass HOT3D
-QA/SAM eligibility and all of:
+## Data
 
-- at least 98% of MANO vertices inside the source image;
-- visible-MANO completeness at least 0.90;
-- projected MANO area at least 1% of the image;
-- at least 99.5% of MANO vertices inside a 1.35x square crop;
-- no reprojected HOT3D object bbox overlapping more than 5% of the MANO bbox.
+All 16 P0001 sequences were audited: 35,580 eligible candidate frames yielded
+1,251 selected crops. **Every selected crop is training data; no validation or
+test split is held out.** Crops are 512x512 with pixel-centre-correct intrinsics.
 
-Of 35,580 candidates, 1,251 passed. For subject-specific reconstruction all
-1,251 accepted frames are training data: there is no held-out split, and quality
-is judged by fixed-frame visual galleries plus final frame-aligned renders.
-Crops are 512x512, and the pinhole intrinsics are updated with pixel-centre-
-correct crop/resize math. The final contact sheet was
-reviewed after the object gate; obvious held-object examples present in v1 are
-absent in v3.
+Selection uses existing SAM database exposure/QA eligibility, at least 98% of
+MANO vertices in the source image, at least 99.5% in the 1.35x crop, at least 90%
+SAM coverage of projected MANO, projected area at least 1%, and projected object
+bbox overlap at most 5% of the MANO bbox. Sharpness and luma are exported
+measurements, not additional rejection thresholds.
 
-Versioned generated data (on the /data-backed outputs symlink):
+An independent per-triangle-union silhouette recheck passed all 1,251 frames
+(minimum coverage 0.907); see `reports/silhouette_union_recheck.json`. The audit
+rasterizer now fills triangles individually to avoid even/odd contour holes.
+The original frozen audit counts describe the earlier v3 rasterizer; rerunning
+the improved audit can change the full candidate selection.
 
-- outputs/gaussian_hand/P0001_right/audit_v3/frames.jsonl
-- outputs/gaussian_hand/P0001_right/dataset_all_v4/frames.jsonl
-- outputs/gaussian_hand/P0001_right/dataset_v3/contact_sheet.jpg
+Geometric coverage and object boxes are proxies: selected images can still
+contain nearby props, tracking markers, motion blur and SAM forearm regions.
+Cropping magnifies existing pixels; no diffusion-generated textures supervise
+this model. Unseen surfaces and fine skin detail remain limited by the data.
 
-## Environment
+Generated data is on the `/data`-backed `outputs` symlink:
 
-The tested environment is /data/szeng87/venvs/gaussian-hand, Python 3.10,
-PyTorch 2.11.0+cu128, gsplat 1.5.3, and the versions in requirements.txt.
-Activate it before any gsplat command:
+- `outputs/gaussian_hand/P0001_right/audit_v3/frames.jsonl`
+- `outputs/gaussian_hand/P0001_right/dataset_all_v4/frames.jsonl`
+- `outputs/gaussian_hand/P0001_right/dataset_v3/contact_sheet.jpg`
 
-    source /data/szeng87/venvs/gaussian-hand/bin/activate
+## Environment and training
 
-The first CUDA call compiles gsplat for the installed GPU. Keep environments,
-datasets, and checkpoints on /data; the system filesystem is 98% full.
+Use `/data/szeng87/venvs/gaussian-hand` (Python 3.10, PyTorch 2.11.0+cu128,
+gsplat 1.5.3; see `requirements.txt`). Activation puts ninja on PATH for CUDA
+extension compilation. Keep checkpoints and environments on `/data`.
 
-## Reproduce the preparation
+```bash
+source /data/szeng87/venvs/gaussian-hand/bin/activate
+CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.run \
+  --standalone --nproc-per-node=4 -m gaussian_hand.train \
+  --config gaussian_hand/configs/train/P0001_right_512.json \
+  --output outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3
+```
 
-    python -m gaussian_hand.data.audit_hot3d \
-      --config gaussian_hand/configs/subjects/P0001_right.json \
-      --output outputs/gaussian_hand/P0001_right/audit_v3
+Four synchronous workers average gradients using manual all-reduce, allowing
+Gaussian parameter sizes to change. **30,000 optimizer steps x batch four =
+120,000 sampled frames**, not the same optimization as 120,000 batch-one steps.
+Warm speed is approximately 26 ms/global step at the start of this run.
+Checkpointing, fixed training-frame metrics and galleries occur every 2,500
+steps. The metric called `masked_psnr` measures the entire crop against an RGB
+image with black masked background; it is not foreground-only PSNR.
 
-    python -m gaussian_hand.data.export_crops \
-      --config gaussian_hand/configs/subjects/P0001_right.json \
-      --manifest outputs/gaussian_hand/P0001_right/audit_v3/frames.jsonl \
-      --output outputs/gaussian_hand/P0001_right/dataset_v3
+Resume with `--resume PATH/step_015000.pt` using the same dataset manifest,
+frame ordering, model code and four-worker configuration. Fixed galleries and
+sequence rendering use the supplied raw MANO poses, without training-frame pose
+corrections, so they also expose the inference-time alignment error.
 
-## Four-GPU subject overfit
+## Frame-aligned rendering
 
-Four synchronous GPU workers process distinct frames and average gradients. The
-30k global steps therefore equal 120k frame updates, matching the original
-single-frame iteration budget while reducing wall time.
+```bash
+CUDA_VISIBLE_DEVICES=4 python -m gaussian_hand.render_sequence \
+  --checkpoint outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/step_030000.pt \
+  --sequence P0001_a9d6c83d \
+  --output outputs/gaussian_hand/P0001_right/renders_v3/P0001_a9d6c83d
+```
 
-    CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.run       --standalone --nproc-per-node=4 -m gaussian_hand.train       --config gaussian_hand/configs/train/P0001_right_512.json       --output outputs/gaussian_hand/P0001_right/train_4gpu_30k
+Each sequence produces `render.mp4` (RGB), `alpha.mkv` (lossless alpha),
+`frames.jsonl` (source frame index, timestamp, crop box and adjusted camera
+intrinsics), and `summary.json`. Missing poses/cameras or out-of-view hands yield
+blank frames with a reason; frame alignment is preserved. Subject mismatches are
+rejected. `--start-frame` and `--max-frames` support bounded intervals.
 
-Resume without resetting optimizer, adaptive Gaussian count, or pose deltas:
+To render all configured sequences on four GPUs with a wall-time bound and
+verify RGB/alpha frame counts:
 
-    CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.run       --standalone --nproc-per-node=4 -m gaussian_hand.train       --config gaussian_hand/configs/train/P0001_right_512.json       --output outputs/gaussian_hand/P0001_right/train_4gpu_30k       --resume outputs/gaussian_hand/P0001_right/train_4gpu_30k/step_015000.pt
+```bash
+python -m gaussian_hand.render_subject \
+  --checkpoint outputs/gaussian_hand/P0001_right/train_4gpu_30k_v3/step_030000.pt \
+  --subject-config gaussian_hand/configs/subjects/P0001_right.json \
+  --gpus 4,5,6,7 --time-limit-seconds 1800 \
+  --output outputs/gaussian_hand/P0001_right/renders_v3
+```
 
-Manual gradient all-reduce is used instead of static DDP so adaptive Gaussian
-parameter resizing remains valid. A four-GPU smoke test passed synchronized
-optimization, adaptive split, gallery creation, checkpointing, and resume.
-Measured warm speed was about 28 ms/global-step at low Gaussian count. Budget
-20-30 minutes on four B200s, up to 4 GiB VRAM per rank, and 0.5 GiB disk.
+To make a source-crop/render comparison video and contact sheet:
 
-## Render every MANO frame
+```bash
+python -m gaussian_hand.make_preview \
+  --render-directory outputs/gaussian_hand/P0001_right/renders_v3/P0001_a9d6c83d \
+  --start-frame 2150 --max-frames 180 \
+  --output outputs/gaussian_hand/P0001_right/previews_v3/a9d6c83d.mp4
+```
 
-This emits an RGB MP4, lossless alpha MKV, and JSONL with original frame indices.
-Frames without a right-hand MANO pose, camera pose, or any in-image hand are
-blank but remain aligned.
-
-    CUDA_VISIBLE_DEVICES=0 python -m gaussian_hand.render_sequence \
-      --checkpoint outputs/gaussian_hand/P0001_right/train_4gpu_30k/step_030000.pt \
-      --sequence P0001_a9d6c83d \
-      --output outputs/gaussian_hand/P0001_right/renders/P0001_a9d6c83d
-
-A short checkpoint is only a pipeline smoke test, not a usable appearance model.
+These are appearance-overfit checks, not evidence of held-out generalization.

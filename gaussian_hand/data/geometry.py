@@ -27,7 +27,10 @@ def rasterize_silhouette(uv: np.ndarray, z: np.ndarray, faces: np.ndarray,
                      (width + downsample - 1) // downsample), np.uint8)
     if len(valid_faces):
         polygons = np.rint(uv[valid_faces] / downsample).astype(np.int32)
-        cv2.fillPoly(mask, polygons, 1)
+        # Fill each face separately: fillPoly over overlapping contours uses
+        # even/odd filling and can create holes instead of the mesh union.
+        for polygon in polygons:
+            cv2.fillConvexPoly(mask, polygon, 1)
     return mask
 
 

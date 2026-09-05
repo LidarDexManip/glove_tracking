@@ -23,3 +23,14 @@ def test_crop_intrinsics_preserves_projected_pixel_centres():
     k = np.array([[100.0, 0.0, 40.0], [0.0, 120.0, 50.0], [0.0, 0.0, 1.0]])
     result = crop_intrinsics(k, (10, 20, 110, 120), 200)
     assert np.allclose(result, [[200, 0, 60.5], [0, 240, 60.5], [0, 0, 1]])
+
+
+def test_silhouette_is_union_of_overlapping_triangles():
+    from gaussian_hand.data.geometry import rasterize_silhouette
+    uv = np.array([[2., 2.], [18., 2.], [2., 18.]])
+    z = np.ones(3)
+    # Front and back mesh faces may have the same projected footprint.
+    single = rasterize_silhouette(uv, z, np.array([[0, 1, 2]]), 24, 24, 1)
+    overlap = rasterize_silhouette(uv, z, np.array([[0, 1, 2], [0, 2, 1]]), 24, 24, 1)
+    np.testing.assert_array_equal(overlap, single)
+    assert overlap[5, 5] == 1

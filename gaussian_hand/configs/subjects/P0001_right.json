@@ -27,7 +27,7 @@
     "P0001_f71fc9b1"
   ],
   "selection_policy": {
-    "status": "frozen_v1",
+    "status": "frozen_v3_with_union_recheck",
     "required_qa_masks": [
       "good_exposure",
       "hand_pose_available",
@@ -35,14 +35,13 @@
       "headset_pose_available",
       "qa_pass"
     ],
-    "min_hot3d_hand_visibility": 0.8,
     "min_mano_inside_image": 0.98,
     "min_mano_inside_crop": 0.995,
     "min_visible_mano_silhouette_ratio": 0.9,
     "max_raw_object_bbox_overlap_proxy": 0.05,
     "min_projected_hand_area_fraction": 0.01,
-    "reject_blur_and_exposure_outliers": true,
-    "require_manual_diverse_contact_sheet_review": true
+    "require_manual_diverse_contact_sheet_review": true,
+    "photometric_policy": "SAM database exposure/QA eligibility; exported sharpness and mean_luma are diagnostics, not additional thresholds"
   },
   "crop": {
     "shape": "square",
