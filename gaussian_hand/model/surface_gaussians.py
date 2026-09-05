@@ -255,10 +255,16 @@ class GaussianHand(nn.Module):
         palm_weight = torch.sigmoid(-20.0 * frame_c[:, 2, 2])
         coefficients = (palm_weight[:, None, None] * sh[0] +
                         (1 - palm_weight[:, None, None]) * sh[1])
-        illumination = torch.einsum("nk,nkc->nc", basis, coefficients).clamp_min(0)
-        colors = torch.sigmoid(self.albedo_logits) * illumination
+        raw_illumination = torch.einsum("nk,nkc->nc", basis, coefficients)
+        # A hard non-negative clamp creates a dead SH state: once all channels
+        # cross below zero, image gradients can no longer recover lighting.
+        illumination = F.softplus(raw_illumination, beta=5.0)
+        # Multiplication in odds space is bounded, differentiable at both ends,
+        # and is exactly neutral when illumination is one.
+        colors = torch.sigmoid(
+            self.albedo_logits + torch.log(illumination.clamp_min(1e-6)))
         return {
             "means": means, "quats": quaternions, "scales": scales,
             "opacities": torch.sigmoid(self.opacity_logits),
-            "colors": colors.clamp(0, 1), "normals": normal,
+            "colors": colors, "normals": normal,
         }
