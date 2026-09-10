@@ -94,6 +94,8 @@ class HuggAriaInferenceApp:
             render_opacity=data.get("render_opacity", 1.0),
             render_kind=data.get("render_kind", "gaussian"),
             render_alpha_filename=data.get("render_alpha_filename", "alpha.mkv"),
+            render_rgb_semantics=data.get("render_rgb_semantics", "straight"),
+            render_storage=data.get("render_storage", "aligned_video"),
             alpha_threshold=data.get("alpha_threshold", 0.0),
             loss_mask_source=data.get("loss_mask_source", "overlay"),
             loss_mask_root=(

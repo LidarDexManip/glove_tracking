@@ -80,7 +80,19 @@ class HuggAriaOverlayDataset(Dataset):
         condition_fill_value: float = 0.0,
         include_numpy: bool = False,
         max_open_sequences: int = 2,
+        render_rgb_semantics: str = "straight",
+        render_storage: str = "aligned_video",
     ) -> None:
+        if render_rgb_semantics not in {"straight", "premultiplied"}:
+            raise ValueError("Unknown render RGB semantics")
+        if render_storage not in {"aligned_video", "sparse_frames"}:
+            raise ValueError("Unknown render storage")
+        if render_rgb_semantics == "premultiplied" and condition_style != "glove2hand_faithful":
+            raise ValueError("Premultiplied rendering requires faithful conditioning")
+        self.render_rgb_semantics = render_rgb_semantics
+        self.render_storage = render_storage
+        self._sparse_sources = OrderedDict()
+        self._verified_render_sequences = set()
         self.manifest_path = Path(manifest)
         if not self.manifest_path.is_file():
             raise FileNotFoundError(self.manifest_path)
@@ -212,12 +224,15 @@ class HuggAriaOverlayDataset(Dataset):
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state["_videos"] = OrderedDict()
+        state["_sparse_sources"] = OrderedDict()
         state["_loss_mask_videos"] = OrderedDict()
         state["_databases"] = OrderedDict()
         state["_wrist_rings"] = OrderedDict()
         return state
 
     def __del__(self) -> None:
+        for capture in getattr(self, "_sparse_sources", {}).values():
+            capture.release()
         for rgb, render, alpha, _ in getattr(self, "_videos", {}).values():
             rgb.release()
             render.release()
@@ -275,6 +290,29 @@ class HuggAriaOverlayDataset(Dataset):
     def _read_triplet(
         self, sequence: str, frame_index: int
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if self.render_rgb_semantics == "premultiplied" and sequence not in self._verified_render_sequences:
+            metadata = json.loads((self.render_root / sequence / "_SUCCESS.json").read_text())
+            if metadata.get("rgb_semantics") != "premultiplied" or metadata.get("storage") != self.render_storage:
+                raise ValueError(f"Render cache contract mismatch: {sequence}")
+            if metadata.get("subject_id") != sequence.split("_")[0]:
+                raise ValueError(f"Render cache identity mismatch: {sequence}")
+            self._verified_render_sequences.add(sequence)
+        if self.render_storage == "sparse_frames":
+            capture = self._sparse_sources.pop(sequence, None)
+            if capture is None:
+                capture = cv2.VideoCapture(str(self.pinhole_root / sequence / "rgb_214_1_pinhole.mp4"))
+            self._sparse_sources[sequence] = capture
+            while len(self._sparse_sources) > self.max_open_sequences:
+                _, old = self._sparse_sources.popitem(last=False)
+                old.release()
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ok, rgb = capture.read()
+            directory = self.render_root / sequence / "frames"
+            render = cv2.imread(str(directory / f"{frame_index:06d}_rgb.png"))
+            alpha = cv2.imread(str(directory / f"{frame_index:06d}_alpha.png"), 0)
+            if not ok or render is None or alpha is None:
+                raise RuntimeError(f"Missing sparse render/source: {sequence}:{frame_index}")
+            return cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB), cv2.cvtColor(render, cv2.COLOR_BGR2RGB), alpha
         rgb_capture, render_capture, alpha_capture, next_frame = (
             self._video_triplet(sequence)
         )
@@ -552,6 +590,7 @@ class HuggAriaOverlayDataset(Dataset):
                 ),
                 fill_value=self.condition_fill_value,
                 render_opacity=self.render_opacity,
+                render_rgb_semantics=self.render_rgb_semantics,
             )
             condition = faithful.condition_rgb
             raw_overlay = faithful.raw_overlay_rgb
@@ -655,6 +694,7 @@ class HuggAriaOverlayDataset(Dataset):
                     self.wrist_sleeve_hand_overlap_ratio
                 ),
                 "render_kind": self.render_kind,
+                "render_rgb_semantics": self.render_rgb_semantics,
                 "render_root": str(self.render_root),
                 "alpha_source": self.render_alpha_filename,
                 "loss_mask_source": self.loss_mask_source,

@@ -416,6 +416,7 @@ def build_faithful_condition(
     wrist_sleeve_hand_overlap_ratio: float = 0.25,
     fill_value: float = 0.0,
     render_opacity: float = 1.0,
+    render_rgb_semantics: str = "straight",
 ) -> FaithfulCondition:
     """Build the paper-style corrupted overlay and explicit edit condition."""
 
@@ -471,12 +472,20 @@ def build_faithful_condition(
         render_alpha.astype(np.float32) * float(render_opacity), 0.0, 1.0
     )[..., None]
     alpha = raw_alpha * visible.astype(np.float32)[..., None]
-    raw_overlay = target_rgb * (1.0 - raw_alpha) + render_rgb * raw_alpha
-    overlay = target_rgb * (1.0 - alpha) + render_rgb * alpha
+    if render_rgb_semantics == "straight":
+        raw_foreground = render_rgb * raw_alpha
+    elif render_rgb_semantics == "premultiplied":
+        # Also removes codec ringing and RGB from a masked-out hand instance.
+        raw_foreground = render_rgb * float(render_opacity) * (render_alpha > 0)[..., None]
+    else:
+        raise ValueError("render_rgb_semantics must be straight or premultiplied")
+    foreground = raw_foreground * visible[..., None]
+    raw_overlay = target_rgb * (1.0 - raw_alpha) + raw_foreground
+    overlay = target_rgb * (1.0 - alpha) + foreground
 
     condition = target_rgb.copy()
     condition[edit] = float(fill_value)
-    condition = condition * (1.0 - alpha) + render_rgb * alpha
+    condition = condition * (1.0 - alpha) + foreground
     # The wrist is masked after pasting so the renderer's terminal wrist edge is
     # never leaked into the condition.
     condition[wrist] = float(fill_value)
