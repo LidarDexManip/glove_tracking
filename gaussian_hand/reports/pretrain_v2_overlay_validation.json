@@ -1,0 +1,18 @@
+{
+  "left": {
+    "frames": 12,
+    "max_overlay_change_outside_mano": 0.0,
+    "max_center_off_surface_m": 0.0,
+    "mean_initial_loss": 0.30715948591629666,
+    "mean_600_step_loss": 0.15112290220956007,
+    "geometry_and_poses_unchanged": true
+  },
+  "right": {
+    "frames": 12,
+    "max_overlay_change_outside_mano": 0.0,
+    "max_center_off_surface_m": 0.0,
+    "mean_initial_loss": 0.3119255180160205,
+    "mean_600_step_loss": 0.1458863274504741,
+    "geometry_and_poses_unchanged": true
+  }
+}

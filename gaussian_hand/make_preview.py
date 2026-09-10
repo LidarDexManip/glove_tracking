@@ -18,6 +18,7 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--start-frame", type=int, default=0)
     p.add_argument("--max-frames", type=int, default=180)
+    p.add_argument("--overlay", action="store_true")
     args = p.parse_args()
     summary = json.loads((args.render_directory / "summary.json").read_text())
     records = [json.loads(x) for x in (args.render_directory / "frames.jsonl").read_text().splitlines()]
@@ -29,11 +30,16 @@ def main():
     pred = cv2.VideoCapture(str(args.render_directory / "render.mp4"))
     cap.set(cv2.CAP_PROP_POS_FRAMES, selected[0][1]["frame_index"])
     pred.set(cv2.CAP_PROP_POS_FRAMES, selected[0][0])
+    alpha_cap = None
+    if args.overlay:
+        alpha_cap = cv2.VideoCapture(str(args.render_directory / "alpha.mkv"))
+        alpha_cap.set(cv2.CAP_PROP_POS_FRAMES, selected[0][0])
+    panel_width = 1536 if args.overlay else 1024
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     args.output.parent.mkdir(parents=True, exist_ok=True)
     encoder = subprocess.Popen([
         "ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
-        "-s", "1024x512", "-r", str(fps), "-i", "-", "-an", "-c:v", "libx264",
+        "-s", f"{panel_width}x512", "-r", str(fps), "-i", "-", "-an", "-c:v", "libx264",
         "-threads", "2", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
         str(args.output)], stdin=subprocess.PIPE)
     gallery = []
@@ -50,7 +56,20 @@ def main():
             else:
                 target = cv2.resize(image, (512, 512))
             render = cv2.resize(render, (512, 512))
-            panel = np.concatenate((target, render), axis=1)
+            panels = [target, render]
+            if args.overlay:
+                ok_alpha, alpha_image = alpha_cap.read()
+                if not ok_alpha:
+                    raise RuntimeError("Alpha video ended early")
+                alpha = cv2.resize(alpha_image,(512,512))[...,:1].astype(np.float32)/255
+                # Encoded RGB may have codec ringing outside support. Zero it
+                # where lossless alpha is zero before premultiplied composition.
+                premultiplied = render.astype(np.float32) * (alpha > 0)
+                overlay = np.clip(premultiplied + (1-alpha)*target,0,255).astype(np.uint8)
+                panels.append(overlay)
+            panel = np.concatenate(panels, axis=1)
+            if args.overlay:
+                cv2.putText(panel,"Overlay",(1036,28),cv2.FONT_HERSHEY_SIMPLEX,.7,(0,255,0),2,cv2.LINE_AA)
             cv2.putText(panel, "Source crop", (10, 28), cv2.FONT_HERSHEY_SIMPLEX,
                         .7, (0, 255, 0), 2, cv2.LINE_AA)
             cv2.putText(panel, "Gaussian / raw MANO", (524, 28), cv2.FONT_HERSHEY_SIMPLEX,
@@ -60,10 +79,11 @@ def main():
                         (255, 255, 255), 1, cv2.LINE_AA)
             encoder.stdin.write(np.ascontiguousarray(panel).tobytes())
             if offset in chosen:
-                gallery.append(cv2.resize(panel, (768, 384)))
+                gallery.append(cv2.resize(panel, (panel_width//2, 256)))
     finally:
         cap.release()
         pred.release()
+        if alpha_cap is not None: alpha_cap.release()
         encoder.stdin.close()
         code = encoder.wait()
     if code:

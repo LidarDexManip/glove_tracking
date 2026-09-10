@@ -89,8 +89,8 @@ def save_checkpoint(path, step, model, pose_refinement, optimizer, config,
         "global_frame_updates": step * world_size,
         "distributed_world_size": world_size,
         "model_id": config["model_id"],
-        "binding": {"dataset": "HOT3D", "subject_id": "P0001",
-                    "handedness": "right"},
+        "binding": config.get("binding", {"dataset": "HOT3D", "subject_id": "P0001",
+                    "handedness": "right"}),
         "source_sequences": sorted({item["sequence"] for item in records}),
         "config": config,
         "config_sha256": hashlib.sha256(
@@ -124,12 +124,18 @@ def evaluate(model, dataset, device, resolution, loss_config, max_frames=32):
         loss, _ = reconstruction_loss(
             render, x["image"], x["mask"], **loss_config)
         target = x["image"] * x["mask"]
+        if "mesh_mask" in render:
+            target = x["image"] * render["mesh_mask"]
         losses.append(float(loss))
-        mses.append(float((render["rgb"] - target).square().mean()))
+        if "mesh_mask" in render:
+            reference = render["mesh_mask"] * x["mask"]
+            mses.append(float(((render["rgb"]-x["image"]).square()*reference).sum() / (3*reference.sum()).clamp_min(1)))
+        else:
+            mses.append(float((render["rgb"] - target).square().mean()))
     model.train()
     mse = max(float(np.mean(mses)), 1e-12)
     return {"frames": len(indices), "reconstruction_loss": float(np.mean(losses)),
-            "masked_psnr": float(-10 * np.log10(mse))}
+            ("visible_mano_reference_psnr" if model.strict_surface else "masked_psnr"): float(-10 * np.log10(mse))}
 
 
 @torch.no_grad()
@@ -194,16 +200,28 @@ def main():
     device_betas = torch.tensor(
         json.loads((dataset_root / "frames.jsonl").open().readline())["mano_betas"],
         dtype=torch.float32)
-    model = GaussianHand(
-        str(resolve(config["mano_model"])), device_betas,
-        int(config["gaussians_per_face"]),
-        float(config["normal_offset_max_m"])).to(device)
+    binding = config.get("binding", {"dataset":"HOT3D","subject_id":"P0001","handedness":"right"})
+    if any(not r["sequence"].startswith(binding["subject_id"]+"_") or r["handedness"] != binding["handedness"]
+           for r in dataset.records):
+        raise ValueError("Training dataset identity mismatch")
+    if any(not np.allclose(r["mano_betas"], device_betas.numpy(), rtol=0, atol=1e-5)
+           for r in dataset.records):
+        raise ValueError("Training dataset has inconsistent subject MANO shape")
+    model = GaussianHand.from_config(config, device_betas, ROOT).to(device)
     pose_refinement = PoseRefinement(len(dataset)).to(device)
+    if config.get("strict_surface"):
+        if any(config["learning_rates"][k] != 0 for k in ("canonical_mesh", "pose_delta")):
+            raise ValueError("Strict MANO overlay training freezes geometry and input poses")
+        pose_refinement.requires_grad_(False)
     resume = None
     if args.resume is not None:
         resume = torch.load(args.resume, map_location=device, weights_only=False)
         if resume.get("model_id") != config["model_id"]:
             raise ValueError("Resume checkpoint model_id mismatch")
+        if resume.get("binding") != binding:
+            raise ValueError("Resume checkpoint subject/hand binding mismatch")
+        if bool(resume["config"].get("strict_surface", False)) != bool(config.get("strict_surface", False)):
+            raise ValueError("Resume checkpoint geometry contract mismatch")
         current_manifest_hash = hashlib.sha256(
             (dataset_root / "frames.jsonl").read_bytes()).hexdigest()
         if resume.get("manifest_sha256") != current_manifest_hash:
@@ -214,6 +232,9 @@ def main():
             raise ValueError("Resume checkpoint world-size mismatch")
         model.load_resizable_state_dict(resume["model"])
         pose_refinement.load_state_dict(resume["pose_refinement"])
+        if model.strict_surface and (torch.count_nonzero(model.mano.canonical_delta).item()
+                                     or any(torch.count_nonzero(p).item() for p in pose_refinement.parameters())):
+            raise ValueError("Strict MANO checkpoint must have zero geometry/pose corrections")
 
     lr = config["learning_rates"]
     optimizer = torch.optim.Adam([
@@ -365,6 +386,16 @@ def main():
 
     if world_size > 1:
         dist.barrier()
+    if world_size > 1:
+        digest = hashlib.sha256()
+        for name, value in sorted({**model.state_dict(), "pose_deltas":pose_refinement.deltas.weight}.items()):
+            digest.update(name.encode()); digest.update(value.detach().cpu().contiguous().numpy().tobytes())
+        signatures = [None] * world_size
+        dist.all_gather_object(signatures, digest.hexdigest())
+        if len(set(signatures)) != 1:
+            raise RuntimeError(f"Distributed model states diverged: {signatures}")
+        if is_main:
+            print(json.dumps({"distributed_model_checksums_match":True,"sha256":signatures[0]}),flush=True)
     if is_main:
         print(json.dumps({
             "status": "complete", "steps": steps,

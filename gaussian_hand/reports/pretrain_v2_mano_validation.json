@@ -1,0 +1,10 @@
+{
+  "left": {
+    "samples": 20,
+    "max_vertex_error_m": 1.3493576034306898e-07
+  },
+  "right": {
+    "samples": 20,
+    "max_vertex_error_m": 4.470348358154297e-08
+  }
+}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+from pathlib import Path
 import torch
 from torch import nn
 
@@ -22,7 +23,7 @@ def quaternion_to_axis_angle(quaternion: torch.Tensor) -> torch.Tensor:
     xyz, w = quaternion[..., 1:], quaternion[..., :1]
     xyz_norm = torch.linalg.vector_norm(xyz, dim=-1, keepdim=True)
     angle = 2.0 * torch.atan2(xyz_norm, w)
-    scale = torch.where(xyz_norm > 1e-8, angle / xyz_norm,
+    scale = torch.where(xyz_norm > 1e-8, angle / xyz_norm.clamp_min(1e-8),
                         2.0 + xyz_norm.square() / 3.0)
     return xyz * scale
 
@@ -30,12 +31,19 @@ def quaternion_to_axis_angle(quaternion: torch.Tensor) -> torch.Tensor:
 class LearnableMANO(nn.Module):
     """MANO LBS whose template correction participates in every posed mesh."""
 
-    def __init__(self, model_path: str, num_pca_comps: int = 15) -> None:
+    def __init__(self, model_path: str, num_pca_comps: int = 15, handedness: str = "right") -> None:
         super().__init__()
         self.layer = smplx.MANO(
-            model_path=model_path, is_rhand=True, use_pca=True,
+            model_path=model_path, is_rhand=handedness == "right", use_pca=True,
             num_pca_comps=num_pca_comps, flat_hand_mean=False,
         )
+        if handedness not in ("left", "right"):
+            raise ValueError(handedness)
+        if handedness == "left":
+            right = smplx.MANO(str(Path(model_path).with_name("MANO_RIGHT.pkl")),
+                               is_rhand=True, use_pca=True, num_pca_comps=num_pca_comps)
+            if (self.layer.shapedirs[:, 0] - right.shapedirs[:, 0]).abs().sum() < 1:
+                self.layer.shapedirs[:, 0] *= -1
         self.layer.requires_grad_(False)
         self.canonical_delta = nn.Parameter(torch.zeros_like(self.layer.v_template))
         self.register_buffer("faces", torch.as_tensor(

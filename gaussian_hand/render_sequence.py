@@ -50,7 +50,7 @@ def world_to_camera(calibration,provider,timestamp):
     dc=np.asarray(calibration["T_device_camera"],np.float64)
     return np.linalg.inv(wd@dc)
 
-def nearest_right_pose(timestamps,hands,timestamp):
+def nearest_hand_pose(timestamps,hands,timestamp):
     index=bisect.bisect_left(timestamps,timestamp)
     choices=[i for i in (index-1,index) if 0 <= i < len(timestamps)]
     if not choices:return None
@@ -72,15 +72,15 @@ def ffmpeg_alpha(path,size,fps):
 def main():
     args=arguments();args.output.mkdir(parents=True,exist_ok=True)
     checkpoint=torch.load(args.checkpoint,map_location=args.device,weights_only=False)
-    expected={"dataset":"HOT3D","subject_id":"P0001","handedness":"right"}
-    if checkpoint.get("binding") != expected:
-        raise ValueError(f"Checkpoint identity mismatch: {checkpoint.get('binding')}")
+    expected=checkpoint["binding"]
+    if expected.get("dataset") != "HOT3D" or expected.get("handedness") not in ("left","right"):
+        raise ValueError("Unsupported checkpoint binding")
     if not args.sequence.startswith(expected["subject_id"] + "_"):
         raise ValueError("Requested sequence belongs to a different subject")
+    hand_key = "1" if expected["handedness"] == "right" else "0"
     config=checkpoint["config"];state=checkpoint["model"]
     betas=state["subject_betas"][0].to(args.device)
-    model=GaussianHand(str(ROOT/config["mano_model"]),betas,
-        int(config["gaussians_per_face"]),float(config["normal_offset_max_m"])).to(args.device)
+    model=GaussianHand.from_config(config,betas,ROOT).to(args.device)
     model.load_resizable_state_dict(state);model.eval()
 
     source=args.pinhole_root/args.sequence
@@ -92,7 +92,7 @@ def main():
     with (source/"mano_hand_pose_trajectory.jsonl").open() as f:
         for line in f:
             item=json.loads(line)
-            pose_items.append((int(item["timestamp_ns"]),item["hand_poses"].get("1")))
+            pose_items.append((int(item["timestamp_ns"]),item["hand_poses"].get(hand_key)))
     pose_items.sort(key=lambda item:item[0])
     pose_timestamps=[item[0] for item in pose_items]
     pose_hands=[item[1] for item in pose_items]
@@ -108,7 +108,7 @@ def main():
     try:
         for frame_index in range(args.start_frame,stop):
             timestamp,calibration=timestamps[frame_index],calibrations[frame_index]
-            hand=nearest_right_pose(pose_timestamps,pose_hands,timestamp)
+            hand=nearest_hand_pose(pose_timestamps,pose_hands,timestamp)
             tcw=world_to_camera(calibration,headset,timestamp)
             rgb,alpha=blank_rgb,blank_alpha;record={"frame_index":frame_index,
                 "timestamp_ns":timestamp,"mano_valid":False,
@@ -156,7 +156,8 @@ def main():
         "total_frames":count,"rendered_mano_frames":valid_count,
         "source_start_frame":args.start_frame,
         "frame_alignment":"manifest stores source frame_index; output frame 0 maps to source_start_frame",
-        "crop_semantics":"per-frame 1.35x projected learnable MANO square"}
+        "crop_semantics":("per-frame 1.35x projected fixed GT MANO square" if model.strict_surface
+                          else "per-frame 1.35x projected learnable MANO square")}
     (args.output/"summary.json").write_text(json.dumps(summary,indent=2)+"\n")
     print(json.dumps(summary,indent=2))
 

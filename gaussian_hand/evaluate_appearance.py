@@ -26,9 +26,7 @@ def main():
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=False)
     config = checkpoint["config"]
     dataset = GaussianHandDataset(ROOT / config["dataset_root"], "all", 512)
-    model = GaussianHand(str(ROOT / config["mano_model"]),
-                         checkpoint["model"]["subject_betas"][0],
-                         config["gaussians_per_face"], config["normal_offset_max_m"]).to(args.device)
+    model = GaussianHand.from_config(config, checkpoint["model"]["subject_betas"][0], ROOT).to(args.device)
     model.load_resizable_state_dict(checkpoint["model"])
     model.eval()
     args.output.mkdir(parents=True, exist_ok=True)
@@ -44,10 +42,12 @@ def main():
     records = []
     for i in range(len(dataset)):
         x, out = render_sample(i)
-        squared = (out["rgb"] - x["image"] * x["mask"]).square()
-        foreground_squared = float((squared * x["mask"]).sum())
-        foreground_values = float(x["mask"].sum()) * 3
-        pred, target = out["alpha"] > .5, x["mask"] > .5
+        support = out.get("mesh_mask", x["mask"])
+        reference = support * x["mask"]
+        squared = (out["rgb"] - x["image"] * support).square()
+        foreground_squared = float((squared * reference).sum())
+        foreground_values = float(reference.sum()) * 3
+        pred, target = out["alpha"] > .5, support > .5
         records.append({"index": i, "sequence": x["sequence"], "frame_index": x["frame_index"],
                         "crop_mse": float(squared.mean()),
                         "foreground_squared_error": foreground_squared,
@@ -61,8 +61,8 @@ def main():
     report = {"checkpoint": str(args.checkpoint), "frames": len(records),
               "policy": "all training frames, raw MANO, no held-out evaluation",
               "black_background_crop_psnr": float(-10 * np.log10(max(mse, 1e-12))),
-              "sam_foreground_psnr": float(-10 * np.log10(max(foreground_mse, 1e-12))),
-              "mean_alpha_iou": float(np.mean([r["alpha_iou"] for r in records]))}
+              ("visible_mano_reference_psnr" if model.strict_surface else "sam_foreground_psnr"): float(-10 * np.log10(max(foreground_mse, 1e-12))),
+              ("mano_alpha_iou" if model.strict_surface else "mean_alpha_iou"): float(np.mean([r["alpha_iou"] for r in records]))}
     (args.output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     (args.output / "frames.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
     order = sorted(records, key=lambda r: r["foreground_mse"])

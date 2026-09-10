@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "model_id": "hot3d-P0003-left-mano-surface-v2",
+  "dataset_root": "/home/szeng87/glove_tracking/outputs/gaussian_hand/pretrain_v2/P0003_left/dataset",
+  "mano_model": "mano_v1_2/models/MANO_LEFT.pkl",
+  "resolution": 512,
+  "steps": 30000,
+  "gaussians_per_face": 4,
+  "normal_offset_max_m": 0.0,
+  "learning_rates": {
+    "surface": 0.0005,
+    "albedo": 0.0025,
+    "opacity": 0.001,
+    "canonical_mesh": 0.0,
+    "lighting": 0.0001,
+    "pose_delta": 0.0
+  },
+  "loss": {
+    "dssim_weight": 0.2,
+    "alpha_weight": 0.1,
+    "distortion_weight": 0.0001
+  },
+  "checkpoint_every": 2500,
+  "paper_facts": {
+    "iterations": 120000,
+    "reported_a100_80gb_hours": 12,
+    "reported_convergence_hours": 6,
+    "objective": "image reconstruction only"
+  },
+  "reproduction_assumptions": [
+    "Fixed GT MANO mesh and pose for source-video overlay; no canonical or pose corrections",
+    "Gaussian centers exactly on MANO triangles; scales bounded by local triangle altitude and 4mm",
+    "MANO silhouette is rendering support and alpha coverage target; SAM only selects color reference",
+    "Photometric loss on visible MANO/SAM intersection, SSIM only on fully supported windows",
+    "Existing SH appearance model retained; no manual relighting interface"
+  ],
+  "canonical_mesh_start_step": 0,
+  "adaptive_control": {
+    "every": 1250,
+    "split_fraction": 0.05,
+    "max_gaussians": 20000,
+    "prune_start_step": 2500,
+    "opacity_prune_threshold": 0.02
+  },
+  "training_split": "all",
+  "distributed_world_size": 4,
+  "global_batch_size": 4,
+  "reference_single_gpu_frame_updates": 120000,
+  "evaluation_every": 2500,
+  "evaluation_frames": 32,
+  "visual_every": 2500,
+  "visual_frames": 12,
+  "evaluation_policy": "all frames train; judge overfit using fixed visual galleries and final frame-aligned renders",
+  "binding": {
+    "dataset": "HOT3D",
+    "subject_id": "P0003",
+    "handedness": "left"
+  },
+  "strict_surface": true
+}

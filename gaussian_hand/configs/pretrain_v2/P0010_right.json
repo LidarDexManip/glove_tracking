@@ -1,0 +1,63 @@
+{
+  "binding": {
+    "dataset": "HOT3D",
+    "subject_id": "P0010",
+    "handedness": "right",
+    "model_id": "hot3d-P0010-right-mano-surface-v2"
+  },
+  "pinhole_root": "data/HUGG_ARIA_PINHOLE",
+  "raw_root": "data/raw/hot3d_aria",
+  "sequences": [
+    "P0010_0ecbf39f",
+    "P0010_1573a837",
+    "P0010_160e551c",
+    "P0010_1c9fe708",
+    "P0010_41c4c626",
+    "P0010_573b2de6",
+    "P0010_6d15aa57",
+    "P0010_8ff3e5c4",
+    "P0010_924e574e",
+    "P0010_99385ad8",
+    "P0010_b152143e",
+    "P0010_e481fd15",
+    "P0010_fd1891a8"
+  ],
+  "selection_policy": {
+    "min_mano_inside_image": 0.98,
+    "min_mano_inside_crop": 0.995,
+    "min_visible_mano_silhouette_ratio": 0.9,
+    "min_projected_hand_area_fraction": 0.01,
+    "occlusion_policy": "SAM-visible coverage of projected MANO; no raw object bbox proxy"
+  },
+  "crop": {
+    "scale_around_projected_mano": 1.35,
+    "output_size": 512
+  },
+  "split_policy": {
+    "train_sequences": [
+      "P0010_0ecbf39f",
+      "P0010_1573a837",
+      "P0010_160e551c",
+      "P0010_1c9fe708",
+      "P0010_41c4c626",
+      "P0010_573b2de6",
+      "P0010_6d15aa57",
+      "P0010_8ff3e5c4",
+      "P0010_924e574e",
+      "P0010_99385ad8",
+      "P0010_b152143e",
+      "P0010_e481fd15",
+      "P0010_fd1891a8"
+    ],
+    "validation_sequences": [],
+    "test_sequences": []
+  },
+  "sampling": {
+    "audit_mask_downsample": 4,
+    "minimum_frame_gap": 1
+  },
+  "photometric_filter": {
+    "min_laplacian_variance": 8.0,
+    "max_clipped_fraction": 0.05
+  }
+}

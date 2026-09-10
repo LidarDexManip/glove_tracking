@@ -4,6 +4,25 @@ Independent, subject-bound implementation of the Gaussian Hand stage in
 [Glove2Hand](https://arxiv.org/abs/2603.20850). It does not import the old
 `external/bare-hand_gaussian_reconstruction` code or checkpoints.
 
+## Current: MANO-only overlay preparation (v2)
+
+Prepared **9 GT Aria train subjects, both hands: 18 datasets / 54,468 crops**.
+Each model is bound to one subject and one hand; all accepted frames train.
+No Aria test sequences or new SAM generation are involved.
+
+The v2 contract fixes GT MANO geometry/pose, keeps Gaussian centers on its
+triangles, bounds surfel scales, and clips rendering to the MANO silhouette.
+SAM only selects visible color-reference pixels inside that silhouette; it is
+not an alpha target or rendering boundary. This deliberately disables the
+learnable geometry/pose corrections described in the legacy baseline below.
+
+Preparation and four-GPU short tests are complete; **formal v2 training has
+not started**. See [the readiness report](reports/pretrain_v2.md) for per-hand
+counts, visual examples, limitations and commands. P0011/left has only 349
+accepted frames, and most hands have strongly imbalanced viewing directions.
+
+## Historical P0001 baseline (v1 / training run v3)
+
 Identity: **HOT3D / P0001 / right** (`hot3d-P0001-right-gaussian-hand-v1`).
 The diffusion baseline is already merged into local `main` and tagged
 `baseline-adaptive-splitcrop-v1`; this work is on `agent/gaussian-hand-hot3d`.

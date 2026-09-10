@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-def ssim(x: torch.Tensor, y: torch.Tensor, window: int = 11) -> torch.Tensor:
+def ssim(x: torch.Tensor, y: torch.Tensor, window: int = 11, reduction=True) -> torch.Tensor:
     x, y = x.permute(2, 0, 1)[None].contiguous(), y.permute(2, 0, 1)[None].contiguous()
     p = window // 2
     mx, my = F.avg_pool2d(x, window, 1, p), F.avg_pool2d(y, window, 1, p)
@@ -12,10 +12,24 @@ def ssim(x: torch.Tensor, y: torch.Tensor, window: int = 11) -> torch.Tensor:
     vxy = F.avg_pool2d(x*y, window, 1, p) - mx*my
     score = ((2*mx*my + .01**2)*(2*vxy + .03**2) /
              ((mx.square()+my.square()+.01**2)*(vx+vy+.03**2)))
-    return score.mean()
+    return score.mean() if reduction else score.mean(1)[0]
 
 def reconstruction_loss(render, image, mask, dssim_weight=.2,
                         alpha_weight=.1, distortion_weight=1e-4):
+    if "mesh_mask" in render:
+        support = render["mesh_mask"]
+        reference = mask * support
+        # Eroded SSIM windows must be wholly inside reliable color reference.
+        valid = reference[..., 0]
+        l1 = ((render["rgb"] - image).abs() * reference).sum() / (3 * reference.sum()).clamp_min(1)
+        full_window = (F.avg_pool2d(valid[None, None], 11, 1, 5)[0, 0] > .999).float()
+        score = ssim(render["rgb"], image, reduction=False)
+        dssim = ((1-score) * full_window).sum() / full_window.sum().clamp_min(1)
+        # Coverage is defined by MANO, never by the larger SAM/forearm region.
+        alpha = ((render["alpha"] - support).abs() * support).sum() / support.sum().clamp_min(1)
+        distortion = (render["distortion"].abs()*support).sum() / support.sum().clamp_min(1)
+        total = (1-dssim_weight)*l1 + dssim_weight*dssim + alpha_weight*alpha + distortion_weight*distortion
+        return total, {"l1":l1,"dssim":dssim,"alpha":alpha,"distortion":distortion}
     target, rgb = image*mask, render["rgb"]
     l1 = (rgb-target).abs().mean()
     dssim = 1-ssim(rgb,target)

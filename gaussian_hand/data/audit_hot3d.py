@@ -40,6 +40,8 @@ from projectaria_tools.core.sensor_data import TimeDomain, TimeQueryOptions  # n
 
 from hugg_aria_sam_policy import RawBoxProjector  # noqa: E402
 
+from gaussian_hand.identity import SubjectBinding
+
 from gaussian_hand.data.geometry import (  # noqa: E402
     crop_intrinsics, fraction_inside_box, project_points, rasterize_silhouette,
     square_crop, visible_mano_ratio,
@@ -132,7 +134,13 @@ def box_overlap_fraction(hand_box: np.ndarray, object_box: np.ndarray) -> float:
 def audit_sequence(sequence: str, source: Path, raw_source: Path,
                    database: Path, model, policy: dict, crop_policy: dict,
                    sampling: dict,
-                   max_frames: int, progress_every: int) -> tuple[list[dict], dict]:
+                   max_frames: int, progress_every: int, handedness: str = "right") -> tuple[list[dict], dict]:
+    meta = json.loads((source / "source_metadata.json").read_text())
+    if meta.get("have_hand_object_pose_gt") is not True:
+        raise ValueError(f"No GT pose: {sequence}")
+    hand_enum = Handedness.Right if handedness == "right" else Handedness.Left
+    hand_key = "1" if handedness == "right" else "0"
+    sam_label = 2 if handedness == "right" else 1
     required = [
         source / "frame_pinhole_calibration_214_1.jsonl",
         source / "mano_hand_pose_trajectory.jsonl",
@@ -148,32 +156,26 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
     pose_timestamps = [int(item["timestamp_ns"]) for item in pose_records]
     hand_provider = MANOHandDataProvider(str(required[1]), model)
     headset_provider = load_headset_pose_provider_from_csv(str(required[2]))
-    faces = np.asarray(model.mano_layer_right.faces, np.int64)
+    faces = np.asarray(getattr(model, "mano_layer_" + handedness).faces, np.int64)
     downsample = int(sampling["audit_mask_downsample"])
     gap = int(sampling["minimum_frame_gap"])
-    object_boxes = load_object_boxes(raw_source / "box2d_objects.csv")
-    projector = RawBoxProjector(
-        raw_source / "mps", source / "timecode_devicetime_mapping.csv",
-        int(calibrations[0]["image_width"]), int(calibrations[0]["image_height"]))
-    native_calibration = projector.native_calibration
-    calibration_cache = {}
+    object_boxes = {}
+    projector = None
+    if policy.get("max_raw_object_bbox_overlap_proxy") is not None:
+        object_boxes = load_object_boxes(raw_source / "box2d_objects.csv")
+        projector = RawBoxProjector(
+            raw_source / "mps", source / "timecode_devicetime_mapping.csv",
+            int(calibrations[0]["image_width"]), int(calibrations[0]["image_height"]))
 
-    def cached_native_calibration(timestamp: int):
-        if timestamp not in calibration_cache:
-            calibration_cache[timestamp] = native_calibration(timestamp)
-        return calibration_cache[timestamp]
-
-    projector.native_calibration = cached_native_calibration
-
-    connection = sqlite3.connect(database)
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
         metadata = {
             key: json.loads(value)
             for key, value in connection.execute("SELECT key,value_json FROM metadata")
         }
         rows = connection.execute(
-            "SELECT frame_index,timestamp_ns,labels_zlib,area_right "
-            "FROM frames WHERE training_eligible=1 AND area_right>0 ORDER BY frame_index"
+            f"SELECT frame_index,timestamp_ns,labels_zlib,area_{handedness} "
+            f"FROM frames WHERE training_eligible=1 AND area_{handedness}>0 ORDER BY frame_index"
         ).fetchall()
     finally:
         connection.close()
@@ -190,7 +192,7 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
     for ordinal, (frame_index, timestamp, blob, sam_area) in enumerate(rows, 1):
         reason = "accepted"
         collection = get_collection(hand_provider, int(timestamp))
-        pose = None if collection is None else collection.poses.get(Handedness.Right)
+        pose = None if collection is None else collection.poses.get(hand_enum)
         t_camera_world = world_to_camera(calibrations[frame_index], headset_provider,
                                          int(timestamp))
         if pose is None or t_camera_world is None:
@@ -212,7 +214,7 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
         inside_image = float(in_image.mean())
         mano_mask = rasterize_silhouette(uv, z, faces, width, height, downsample)
         labels = np.frombuffer(zlib.decompress(blob), np.uint8).reshape(height, width)
-        sam_right = cv2.resize((labels == 2).astype(np.uint8),
+        sam_right = cv2.resize((labels == sam_label).astype(np.uint8),
                                (mano_mask.shape[1], mano_mask.shape[0]),
                                interpolation=cv2.INTER_NEAREST)
         completeness = visible_mano_ratio(sam_right, mano_mask)
@@ -246,7 +248,7 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
             reason = "hand_too_small"
         elif box is None or inside_crop < float(policy["min_mano_inside_crop"]):
             reason = "mano_outside_crop"
-        elif object_overlap > float(policy["max_raw_object_bbox_overlap_proxy"]):
+        elif object_overlap > float(policy.get("max_raw_object_bbox_overlap_proxy", 1.0)):
             reason = "object_bbox_overlap"
         elif frame_index - last_accepted < gap:
             reason = "temporal_gap"
@@ -255,10 +257,10 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
         if reason != "accepted":
             continue
         raw_pose = nearest_pose(pose_records, pose_timestamps, int(timestamp))
-        hand = None if raw_pose is None else raw_pose["hand_poses"].get("1")
+        hand = None if raw_pose is None else raw_pose["hand_poses"].get(hand_key)
         if hand is None:
             counts["accepted"] -= 1
-            counts["missing_raw_right_pose"] += 1
+            counts["missing_raw_hand_pose"] += 1
             continue
         crop_k = crop_intrinsics(k, box, int(crop_policy["output_size"]))
         accepted.append({
@@ -266,7 +268,7 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
             "sequence": sequence,
             "frame_index": int(frame_index),
             "timestamp_ns": int(timestamp),
-            "handedness": "right",
+            "handedness": handedness,
             "mano_pca": [float(v) for v in hand["pose"]],
             "mano_betas": [float(v) for v in hand["betas"]],
             "wrist_q_wxyz": [float(v) for v in hand["wrist_xform"]["q_wxyz"]],
@@ -280,7 +282,7 @@ def audit_sequence(sequence: str, source: Path, raw_source: Path,
             "mano_inside_image": inside_image,
             "mano_inside_crop": inside_crop,
             "projected_hand_area_fraction": area_fraction,
-            "sam_right_area": int(sam_area),
+            "sam_hand_area": int(sam_area),
             "raw_object_bbox_overlap_proxy": object_overlap,
         })
         last_accepted = int(frame_index)
@@ -316,11 +318,7 @@ def main() -> None:
     root = ROOT
     config = json.loads(config_path.read_text())
     binding = config["binding"]
-    if binding != {
-        "dataset": "HOT3D", "subject_id": "P0001", "handedness": "right",
-        "model_id": "hot3d-P0001-right-gaussian-hand-v1",
-    }:
-        raise ValueError(f"Unexpected identity binding: {binding}")
+    SubjectBinding.from_dict(config)
     sequences = args.sequence or config["sequences"]
     if any(not name.startswith(binding["subject_id"] + "_") for name in sequences):
         raise ValueError("Sequence/subject binding mismatch")
@@ -337,7 +335,7 @@ def main() -> None:
             sequence, pinhole_root / sequence, raw_root / sequence,
             args.mask_root / sequence / "masks.sqlite", model,
             config["selection_policy"], config["crop"], config["sampling"],
-            args.max_frames_per_sequence, args.progress_every,
+            args.max_frames_per_sequence, args.progress_every, binding["handedness"],
         )
         all_records.extend(records)
         reports.append(report)

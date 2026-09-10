@@ -11,6 +11,10 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import torch
+
+from gaussian_hand.data.geometry import project_points, rasterize_silhouette
+from gaussian_hand.model.mano import LearnableMANO
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -72,7 +76,13 @@ def make_sheet(examples: list[tuple[np.ndarray, np.ndarray, dict]], output: Path
 
 def main() -> None:
     args = arguments()
+    cv2.setNumThreads(1)
     config = json.loads(args.config.read_text())
+    handedness = config["binding"]["handedness"]
+    mano = LearnableMANO(
+        str(ROOT / "mano_v1_2/models" / f"MANO_{handedness.upper()}.pkl"),
+        handedness=handedness)
+    sam_label = 2 if handedness == "right" else 1
     records = [json.loads(line) for line in args.manifest.open() if line.strip()]
     if args.limit:
         indices = np.linspace(0, len(records) - 1, min(args.limit, len(records))).astype(int)
@@ -86,13 +96,16 @@ def main() -> None:
     image_dir.mkdir(parents=True, exist_ok=True)
     mask_dir.mkdir(parents=True, exist_ok=True)
     exported, examples = [], []
+    # Keep only tiny contact-sheet thumbnails in memory, not every 512px crop.
+    visual_indices = set(np.linspace(0, max(len(records)-1,0), min(args.contact_count, len(records))).astype(int))
+    rejected_photo = 0
     for sequence, sequence_records in sorted(grouped.items()):
         source = ROOT / config["pinhole_root"] / sequence
         video = cv2.VideoCapture(str(source / "rgb_214_1_pinhole.mp4"))
         if not video.isOpened():
             raise RuntimeError(f"Cannot open {sequence} video")
-        database = sqlite3.connect(
-            ROOT / "outputs/sam2_hugg_aria_masks_v3_pilot" / sequence / "masks.sqlite")
+        database_path = ROOT / "outputs/sam2_hugg_aria_masks_v3_pilot" / sequence / "masks.sqlite"
+        database = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
         metadata = {
             key: json.loads(value)
             for key, value in database.execute("SELECT key,value_json FROM metadata")
@@ -102,12 +115,15 @@ def main() -> None:
         last = max(by_frame)
         try:
             for frame_index in range(last + 1):
-                ok, frame = video.read()
+                ok = video.grab()
                 if not ok:
                     raise RuntimeError(f"Decode stopped at {sequence}:{frame_index}")
                 record = by_frame.get(frame_index)
                 if record is None:
                     continue
+                ok, frame = video.retrieve()
+                if not ok:
+                    raise RuntimeError("Frame retrieve failed")
                 row = database.execute(
                     "SELECT labels_zlib FROM frames WHERE frame_index=?", (frame_index,)
                 ).fetchone()
@@ -118,8 +134,24 @@ def main() -> None:
                 size = int(record["output_size"])
                 crop = cv2.resize(frame[y0:y1, x0:x1], (size, size),
                                   interpolation=cv2.INTER_LANCZOS4)
-                mask = cv2.resize((labels[y0:y1, x0:x1] == 2).astype(np.uint8) * 255,
+                mask = cv2.resize((labels[y0:y1, x0:x1] == sam_label).astype(np.uint8) * 255,
                                   (size, size), interpolation=cv2.INTER_NEAREST)
+                if record["handedness"] != handedness:
+                    raise ValueError("Manifest hand mismatch")
+                with torch.no_grad():
+                    verts = mano(torch.tensor(record["mano_pca"]), torch.tensor(record["wrist_q_wxyz"]),
+                                 torch.tensor(record["wrist_t_world"]), torch.tensor(record["mano_betas"]))[0].numpy()
+                uv,z = project_points(verts, np.asarray(record["world_to_camera"]), np.asarray(record["crop_intrinsics"]))
+                support = rasterize_silhouette(uv,z,mano.faces.numpy(),size,size,1)*255
+                reference = cv2.bitwise_and(mask,support)
+                gray = cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
+                pixels = gray[reference>0]
+                quality = sharpness(crop,reference)
+                photo = config.get("photometric_filter",{})
+                if (not len(pixels) or quality < photo.get("min_laplacian_variance",0)
+                    or ((pixels<8)|(pixels>247)).mean() > photo.get("max_clipped_fraction",1.0)):
+                    rejected_photo += 1
+                    continue
                 stem = f"{sequence}_{frame_index:06d}"
                 image_path, mask_path = image_dir / f"{stem}.jpg", mask_dir / f"{stem}.png"
                 if not cv2.imwrite(str(image_path), crop, [cv2.IMWRITE_JPEG_QUALITY, 95]):
@@ -131,11 +163,18 @@ def main() -> None:
                     "split": split_for(sequence, config["split_policy"]),
                     "image": str(image_path.relative_to(output)),
                     "mask": str(mask_path.relative_to(output)),
-                    "sharpness": sharpness(crop, mask),
+                    "sharpness": quality,
+                    "mesh_mask": f"mesh_masks/{stem}.png",
+                    "reference_mask": f"reference_masks/{stem}.png",
                     "mean_luma": float(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)[mask > 0].mean()),
                 })
+                for folder, values in (("mesh_masks",support),("reference_masks",reference)):
+                    (output/folder).mkdir(exist_ok=True)
+                    if not cv2.imwrite(str(output/folder/f"{stem}.png"),values):
+                        raise RuntimeError("Mask write failed")
+                if len(exported) in visual_indices:
+                    examples.append((cv2.resize(crop,(192,192)),cv2.resize(reference,(192,192)),item))
                 exported.append(item)
-                examples.append((crop, mask, item))
         finally:
             video.release()
             database.close()
@@ -146,9 +185,12 @@ def main() -> None:
     with manifest.open("w") as handle:
         for item in exported:
             handle.write(json.dumps(item, separators=(",", ":")) + "\n")
+    if not exported:
+        raise ValueError("No usable frames after photometric filtering")
     stats = {
         "binding": config["binding"],
         "frames": len(exported),
+        "photometric_rejections": rejected_photo,
         "splits": {name: sum(item["split"] == name for item in exported)
                    for name in ("train", "val", "test")},
         "sharpness_percentiles": dict(zip(

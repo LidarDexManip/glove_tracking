@@ -52,9 +52,14 @@ class GaussianHand(nn.Module):
     """Canonical MANO plus deforming, triangle-anchored 2D Gaussian surfels."""
 
     def __init__(self, mano_model_path: str, betas: torch.Tensor,
-                 gaussians_per_face: int = 4, normal_offset_max: float = 0.003) -> None:
+                 gaussians_per_face: int = 4, normal_offset_max: float = 0.003,
+                 handedness: str = "right", strict_surface: bool = False) -> None:
         super().__init__()
-        self.mano = LearnableMANO(mano_model_path)
+        self.mano = LearnableMANO(mano_model_path, handedness=handedness)
+        self.handedness = handedness
+        self.strict_surface = strict_surface
+        if strict_surface:
+            self.mano.canonical_delta.requires_grad_(False)
         self.register_buffer("subject_betas", betas.detach().clone().reshape(1, -1))
         face_count = self.mano.faces.shape[0]
         face_ids = torch.arange(face_count).repeat_interleave(gaussians_per_face)
@@ -72,8 +77,15 @@ class GaussianHand(nn.Module):
         self.opacity_logits = nn.Parameter(torch.full((count,), 2.0))
         self.albedo_logits = nn.Parameter(torch.zeros(count, 3))
         self.normal_offset_logits = nn.Parameter(torch.full((count,), -5.0))
-        self.normal_offset_max = float(normal_offset_max)
+        self.normal_offset_max = 0.0 if strict_surface else float(normal_offset_max)
         self.lighting = PoseLighting()
+
+    @classmethod
+    def from_config(cls, config, betas, root):
+        return cls(str(root / config["mano_model"]), betas,
+                   int(config["gaussians_per_face"]), float(config["normal_offset_max_m"]),
+                   config.get("binding", {}).get("handedness", "right"),
+                   bool(config.get("strict_surface", False)))
 
     def load_resizable_state_dict(self, state_dict: dict) -> None:
         """Load a checkpoint after adaptive control changed Gaussian count."""
@@ -231,6 +243,14 @@ class GaussianHand(nn.Module):
             torch.stack((cosine, -sine), -1),
             torch.stack((sine, cosine), -1)), -2)
         scale2 = self.log_scales.exp()
+        if self.strict_surface:
+            edges = torch.stack((tri_c[:, 1]-tri_c[:, 0], tri_c[:, 2]-tri_c[:, 1],
+                                 tri_c[:, 0]-tri_c[:, 2]), 1)
+            twice_area = torch.cross(edges[:, 0], -edges[:, 2], dim=-1).norm(dim=-1)
+            min_altitude = twice_area / edges.norm(dim=-1).amax(-1).clamp_min(1e-8)
+            local_limit = (0.75 * min_altitude).clamp(0.0002, 0.004)
+            # Smooth bounded scale: gradients remain available near the cap.
+            scale2 = local_limit[:, None] * torch.tanh(scale2 / local_limit[:, None])
         covariance = rotation2 @ torch.diag_embed(scale2.square()) @ rotation2.transpose(-1, -2)
         covariance = deformation @ covariance @ deformation.transpose(-1, -2)
         covariance = .5 * (covariance + covariance.transpose(-1, -2))
@@ -264,5 +284,5 @@ class GaussianHand(nn.Module):
         return {
             "means": means, "quats": quaternions, "scales": scales,
             "opacities": torch.sigmoid(self.opacity_logits),
-            "colors": colors, "normals": normal,
+            "colors": colors, "normals": normal, "vertices": deformed,
         }
