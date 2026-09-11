@@ -31,6 +31,13 @@ For presentation, use the [50-second demo](../outputs/gaussian_hand/result_video
 the same five sequences, 10 seconds per subject, with each image panel rotated
 90 degrees clockwise while keeping the side-by-side layout and titles upright.
 
+The [25-second training-data demo](../outputs/gaussian_hand/result_videos/diffusion_training_data_five_subjects_5s_clockwise90.mp4)
+shows actual target crops beside actual Gaussian diffusion conditions: five
+subjects, 150 consecutive training frames each, with each panel rotated 90
+degrees clockwise. All 750 live conditions match the prepared PNGs exactly
+before video encoding. Wrist blanking and adaptive crop behavior are retained;
+this is an input-data preview, not a diffusion model prediction.
+
 See [the earlier pretraining report](reports/pretrain_v2.md) for per-hand
 counts, visual examples, limitations and commands. P0011/left has only 349
 accepted frames, and most hands have strongly imbalanced viewing directions.
