@@ -4,7 +4,7 @@ Independent, subject-bound implementation of the Gaussian Hand stage in
 [Glove2Hand](https://arxiv.org/abs/2603.20850). It does not import the old
 `external/bare-hand_gaussian_reconstruction` code or checkpoints.
 
-## Current: MANO-only overlay preparation (v2)
+## Current: MANO-only Gaussian models and controlled diffusion preparation (v2)
 
 Prepared **9 GT Aria train subjects, both hands: 18 datasets / 54,468 crops**.
 Each model is bound to one subject and one hand; all accepted frames train.
@@ -16,8 +16,15 @@ SAM only selects visible color-reference pixels inside that silhouette; it is
 not an alpha target or rendering boundary. This deliberately disables the
 learnable geometry/pose corrections described in the legacy baseline below.
 
-Preparation and four-GPU short tests are complete; **formal v2 training has
-not started**. See [the readiness report](reports/pretrain_v2.md) for per-hand
+All 18 formal v2 models have completed 30,000 steps, using four GPUs per model.
+Checkpoints are under `outputs/gaussian_hand/train_mano_surface_v2_30k/`.
+The five-subject full-sequence demo is complete (10 min 33 s). A separate
+Gaussian-input diffusion dataset is being prepared; **diffusion training remains
+unauthorized and has not started**. See the
+[strict comparison runbook](reports/diffusion_strict_v2.md) for preparation
+outputs, runtime readiness checks and the frozen baseline contract.
+
+See [the earlier pretraining report](reports/pretrain_v2.md) for per-hand
 counts, visual examples, limitations and commands. P0011/left has only 349
 accepted frames, and most hands have strongly imbalanced viewing directions.
 

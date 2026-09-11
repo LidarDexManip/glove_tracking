@@ -50,8 +50,9 @@ def fingerprint():
 
 
 class CacheRenderer:
-    def __init__(self, model_root, device):
+    def __init__(self, model_root, device, baseline_mano_root=None):
         self.root, self.device = Path(model_root), device
+        self.baseline_mano_root = Path(baseline_mano_root) if baseline_mano_root else None
         self.models, self.hashes = {}, {}
 
     def subject(self, subject):
@@ -98,6 +99,10 @@ class CacheRenderer:
                     "requested_frames_sha256": hashlib.sha256(json.dumps(sorted(required.items())).encode()).hexdigest(),
                     "checkpoint_sha256": {side: self.hashes[f"{subject}_{side}"] for side in models},
                     "renderer_sha256": fingerprint(), "source_frames": len(timestamps)}
+        if self.baseline_mano_root:
+            alpha_path = self.baseline_mano_root/sequence/"alpha.mkv"
+            contract.update(support_policy="frozen_baseline_mano_alpha", baseline_alpha_sha256=sha256(alpha_path),
+                            rgb_codec="libx264", rgb_preset="veryfast", rgb_crf=20)
         output = output_root/sequence
         if output.exists():
             success = output/"_SUCCESS.json"
@@ -106,12 +111,23 @@ class CacheRenderer:
             saved = json.loads(success.read_text())
             if any(saved.get(k) != v for k, v in contract.items()):
                 raise ValueError(f"Stale cache: {output}")
+            if storage == "aligned_video" and not all((output/f).is_file() for f in ("reconstruction.mp4","alpha.mkv")):
+                raise FileNotFoundError(f"Missing cache video: {output}")
             return saved
         partial = Path(tempfile.mkdtemp(prefix=f".{sequence}.partial.", dir=output_root))
         (partial/"frames").mkdir()
         encoders = []
         if storage == "aligned_video":
-            encoders = [ffmpeg_rgb(partial/"reconstruction.mp4",512,30), ffmpeg_alpha(partial/"alpha.mkv",512,30)]
+            if self.baseline_mano_root:
+                rgb_encoder = subprocess.Popen(["ffmpeg","-y","-loglevel","error","-f","rawvideo",
+                    "-pix_fmt","rgb24","-s","512x512","-r","30","-i","-","-an","-c:v","libx264",
+                    "-threads","2","-preset","veryfast","-crf","20","-pix_fmt","yuv420p",str(partial/"reconstruction.mp4")],
+                    stdin=subprocess.PIPE,stderr=subprocess.PIPE)
+            else:
+                rgb_encoder = ffmpeg_rgb(partial/"reconstruction.mp4",512,30)
+            encoders = [rgb_encoder, ffmpeg_alpha(partial/"alpha.mkv",512,30)]
+        baseline_capture = cv2.VideoCapture(str(alpha_path)) if self.baseline_mano_root else None
+        baseline_next = 0
         blank_rgb, blank_alpha = np.zeros((512,512,3),np.uint8), np.zeros((512,512),np.uint8)
         indices = range(len(timestamps)) if encoders else sorted(required)
         diagnostics = []
@@ -142,6 +158,15 @@ class CacheRenderer:
                     alpha = (result["alpha"][...,0].clamp(0,1).cpu().numpy()*255).round().astype(np.uint8)
                     support = result["mesh_mask"][...,0].cpu().numpy() > 0
                     assert not rgb[~support].any() and not alpha[~support].any()
+                    if baseline_capture is not None:
+                        if baseline_next != frame:
+                            baseline_capture.set(cv2.CAP_PROP_POS_FRAMES,frame)
+                        ok, frozen_alpha = baseline_capture.read()
+                        baseline_next = frame+1
+                        if not ok:raise RuntimeError(f"Cannot read baseline alpha: {sequence}:{frame}")
+                        support = frozen_alpha[...,0] > 0
+                        rgb[~support] = 0
+                        alpha[~support] = 0
                     rgb[alpha == 0] = 0
                     if not alpha.any():
                         raise RuntimeError(f"Empty render at required frame: {sequence}:{frame}")
@@ -154,6 +179,7 @@ class CacheRenderer:
                 for encoder, image in zip(encoders,(rgb,alpha)):
                     encoder.stdin.write(np.ascontiguousarray(image).tobytes())
         finally:
+            if baseline_capture is not None:baseline_capture.release()
             for encoder in encoders:
                 encoder.stdin.close()
             errors = [(encoder.stderr.read().decode(),encoder.wait()) for encoder in encoders]
@@ -183,6 +209,7 @@ def main():
     p.add_argument("--shards",type=int,default=1)
     p.add_argument("--sequence",action="append")
     p.add_argument("--preflight-only",action="store_true")
+    p.add_argument("--baseline-mano-root",type=Path)
     args = p.parse_args()
     cv2.setNumThreads(1); torch.set_num_threads(1)
     frames = manifest_frames(args.manifest)
@@ -191,7 +218,7 @@ def main():
         print(json.dumps({"sequences":len(keys),"unique_frames":sum(len(frames[s]) for s in keys),"storage":args.storage}))
         return
     args.output.mkdir(parents=True,exist_ok=True)
-    renderer = CacheRenderer(args.model_root,"cuda")
+    renderer = CacheRenderer(args.model_root,"cuda",args.baseline_mano_root)
     for seq in keys:
         result = renderer.sequence(seq,frames[seq],args.output,args.storage)
         print(json.dumps(result),flush=True)

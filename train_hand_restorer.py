@@ -7,6 +7,7 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 import platform
 import random
 import re
@@ -532,11 +533,18 @@ def main() -> None:
     seed = int(config.get("seed", 0))
     set_seed(seed)
     train_cfg = config["training"]
+    if config.get("comparison", {}).get("required_readiness"):
+        if os.environ.get("HF_HUB_OFFLINE") != "1" or os.environ.get("TRANSFORMERS_OFFLINE") != "1":
+            raise ValueError("Use the strict launcher: frozen model assets must be loaded offline")
+        from gaussian_hand.diffusion_readiness import validate_ready
+        validate_ready(config_path, resume=args.resume)
     accelerator = Accelerator(
         gradient_accumulation_steps=train_cfg.get("gradient_accumulation_steps", 1),
         mixed_precision=train_cfg.get("mixed_precision", "no"),
         log_with="wandb" if train_cfg.get("use_wandb", False) else None,
     )
+    if config.get("comparison", {}).get("required_readiness") and accelerator.num_processes != 8:
+        raise ValueError("This controlled experiment requires the baseline's 8-rank layout")
     data_format = config["data"].get("format", "raw_hot3d")
     if data_format == "derived_webdataset":
         data = config["data"]
