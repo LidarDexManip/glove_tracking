@@ -5,6 +5,34 @@ training is authorized or started by any preparation script. The long five-subje
 demo is complete: `outputs/gaussian_hand/result_videos/five_subjects_full_sequences.mp4`
 (18,992 frames, 10 min 33 s).
 
+## Final acceptance: ready, training not started
+
+Completed on 2026-09-11. All 136 aligned render caches and 136 image archives
+are complete. Coverage is exactly 393,684 unique source frames and 524,917
+adaptive crop records. The 1,049,834 exported images occupy 162,415,953,920
+archive bytes (151.26 GiB). Every archive header and every index record was
+checked. All preparation processes exited; rendering GPUs 0–2 were released.
+
+Both sparse and encoded-video QA passed all 183 records. Frozen baseline
+conditioning drift, outside-edit pixel changes and protected-object pixel
+changes are all zero. Nine encoded examples spanning all nine subjects were
+also visually reviewed (`aligned_visual_review.json`), in addition to the
+earlier 18 sparse examples. Three actual CPU training-dataloader batches
+spanning nine subjects passed; one lossless archived condition per subject
+matched live conditioning exactly after the documented uint8 conversion.
+
+The independent dataset auditor called `validate_ready(CONFIG)` successfully
+after binding `dataset_audit.json` and `ASSET_LOCK.json` into `READY.json`.
+Audit SHA256: `c78f349bd180eaef270fdf6cc956669874d52496fd40c93977dc1e96f67393c4`.
+Encoded QA SHA256: `529840a573b42401adb0f41e74d04edddd25dcf3905fb83c4b2110a58c38947e`.
+Tests: 65 passed, one CUDA-only test skipped with CUDA deliberately disabled.
+Accelerate command arguments parsed successfully without launching processes.
+An extra invocation of the launcher's default validation mode was rejected by
+the execution safety reviewer because that module also contains a training
+entrypoint; it was not executed. This does not invalidate the independently
+passed readiness gate. No diffusion model or optimizer was initialized, and the
+new diffusion training output directory does not exist.
+
 ## Controlled comparison
 
 The baseline is `baselines/adaptive_splitcrop_v1/BASELINE_FREEZE.json`, training

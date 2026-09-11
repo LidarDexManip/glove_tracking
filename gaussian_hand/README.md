@@ -18,8 +18,9 @@ learnable geometry/pose corrections described in the legacy baseline below.
 
 All 18 formal v2 models have completed 30,000 steps, using four GPUs per model.
 Checkpoints are under `outputs/gaussian_hand/train_mano_surface_v2_30k/`.
-The five-subject full-sequence demo is complete (10 min 33 s). A separate
-Gaussian-input diffusion dataset is being prepared; **diffusion training remains
+The five-subject full-sequence demo is complete (10 min 33 s). The separate
+Gaussian-input diffusion dataset is **prepared and verified**: 136 sequences,
+393,684 source frames, 524,917 adaptive crops. **Diffusion training remains
 unauthorized and has not started**. See the
 [strict comparison runbook](reports/diffusion_strict_v2.md) for preparation
 outputs, runtime readiness checks and the frozen baseline contract.
