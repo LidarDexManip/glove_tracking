@@ -20,8 +20,10 @@ All 18 formal v2 models have completed 30,000 steps, using four GPUs per model.
 Checkpoints are under `outputs/gaussian_hand/train_mano_surface_v2_30k/`.
 The five-subject full-sequence demo is complete (10 min 33 s). The separate
 Gaussian-input diffusion dataset is **prepared and verified**: 136 sequences,
-393,684 source frames, 524,917 adaptive crops. **Diffusion training remains
-unauthorized and has not started**. See the
+393,684 source frames, 524,917 adaptive crops. The user-authorized **four-GPU
+diffusion run started on GPU 0–3 on 2026-09-11**, with batch64 per GPU and the
+same global batch256 / 15,380-step budget. See the
+[four-GPU run report](reports/diffusion_four_gpu_v2.md) and the
 [strict comparison runbook](reports/diffusion_strict_v2.md) for preparation
 outputs, runtime readiness checks and the frozen baseline contract.
 

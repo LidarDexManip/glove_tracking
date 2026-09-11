@@ -49,6 +49,22 @@ The initial estimate is 10–12 hours on four B200 GPUs, based on the baseline's
 per rank at batch32; doubling batch is expected to fit each 179 GiB B200.
 The estimate and memory fit must be checked against real training startup.
 
+## Startup verified
+
+Launched at 2026-09-11 05:17 UTC (13:17 Taipei), launcher PID 2401670,
+training commit `367f7d019f2efa10a9a0674dd37d2e7599b5b3c9`.
+Runtime metadata confirms four GPUs, 524,917 train records, 136 numeric
+validation records, seed7, and fresh initialization (`resume_from: null`).
+The first 25 updates completed with finite loss and no OOM. Updates after
+initial warmup measured a median 2.387 seconds/step, implying approximately
+10.2 compute hours; allow **10–11 hours**, conservatively up to 12 hours for
+runtime variability and checkpoint/validation overhead. Observed device
+occupancy was approximately 112 GiB per GPU, below the 179 GiB capacity.
+At step25, samples_seen was 6,400 and LR was 1.25e-6, matching global batch256
+and the original 100-step warmup. Live progress is in `launch.log` and
+`training_log.csv` under the new output directory; this report is a startup
+snapshot, not a claim that training has finished.
+
 Launch (explicit user training authorization required):
 
 ```bash
