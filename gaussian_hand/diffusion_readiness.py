@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 BASELINE=ROOT/'configs/hand_restoration/hugg_aria_glove2hand_faithful_mano_adaptive_splitcrop_v1.json'
+PREPARED=ROOT/'configs/hand_restoration/hugg_aria_gaussian_surface_strict_v2.json'
+FOUR_GPU_LAYOUT='four_gpu_batch64_same_data'
 
 
 def digest(path):
@@ -26,6 +28,16 @@ def validate_comparison(config):
     if config.get('inference')!=baseline.get('inference'):
         raise ValueError('Evaluation inference settings differ from baseline')
     training=dict(config['training']);training['output_dir']=baseline['training']['output_dir']
+    layout=config['comparison'].get('execution_layout','original_eight_gpu')
+    expected_world=8
+    if layout==FOUR_GPU_LAYOUT:
+        expected_world=4
+        if (training['batch_size'],training['validation_batch_size'],training['gradient_accumulation_steps'])!=(64,16,1):
+            raise ValueError('Authorized four-GPU layout requires batch64/validation16/accumulation1')
+        training['batch_size']=baseline['training']['batch_size']
+        training['validation_batch_size']=baseline['training']['validation_batch_size']
+    elif layout!='original_eight_gpu':
+        raise ValueError('Unknown execution layout')
     if training!=baseline['training']:raise ValueError('Training hyperparameters differ from baseline')
     data=dict(config['data'])
     if data.pop('render_rgb_semantics',None)!='premultiplied' or data.pop('render_storage',None)!='aligned_video':
@@ -33,7 +45,9 @@ def validate_comparison(config):
     if data['render_kind']!='gaussian':raise ValueError('Expected Gaussian treatment')
     data['render_kind']=baseline['data']['render_kind'];data['render_root']=baseline['data']['render_root']
     if data!=baseline['data']:raise ValueError('Data/crop/mask configuration differs from baseline')
-    if config['comparison']['expected_world_size']!=8:raise ValueError('Strict comparison requires original 8-rank layout')
+    if config['comparison']['expected_world_size']!=expected_world:raise ValueError('World size does not match the declared layout')
+    if config['training']['batch_size']*expected_world*config['training']['gradient_accumulation_steps']!=256:
+        raise ValueError('Effective batch must remain 256')
 
 
 def validate_ready(config_path, world_size=None, resume=None):
@@ -41,8 +55,17 @@ def validate_ready(config_path, world_size=None, resume=None):
     path=ROOT/config['comparison']['required_readiness']
     if not path.is_file():raise RuntimeError(f'Data preparation is not ready: {path}')
     ready=json.loads(path.read_text())
-    if ready['status']!='ready' or ready['config_sha256']!=digest(config_path):raise ValueError('Readiness/config mismatch')
-    if world_size is not None and world_size!=8:raise ValueError('Use 8 GPUs for strict baseline comparison')
+    prepared_hash=digest(config_path)
+    if config['comparison'].get('execution_layout')==FOUR_GPU_LAYOUT:
+        prepared=json.loads(PREPARED.read_text());validate_comparison(prepared)
+        prepared_hash=digest(PREPARED)
+        if config['comparison'].get('prepared_config_sha256')!=prepared_hash:
+            raise ValueError('Four-GPU run is not bound to the audited preparation config')
+        if config['data']!=prepared['data'] or config['comparison']['required_readiness']!=prepared['comparison']['required_readiness']:
+            raise ValueError('Four-GPU run must use the exact prepared data')
+    if ready['status']!='ready' or ready['config_sha256']!=prepared_hash:raise ValueError('Readiness/config mismatch')
+    if world_size is not None and world_size!=config['comparison']['expected_world_size']:
+        raise ValueError('Actual world size differs from the selected execution layout')
     if resume is not None:
         resume=Path(resume).resolve();output=(ROOT/config['training']['output_dir']).resolve()
         if not resume.is_dir() or resume.parent!=output:raise ValueError('Only exact resume of this new run is allowed')
@@ -52,7 +75,7 @@ def validate_ready(config_path, world_size=None, resume=None):
     if ready.get('dataset_audit_sha256')!=digest(root/'dataset_audit.json'):
         raise ValueError('Final archive/dataloader audit missing or changed')
     audit=json.loads((root/'dataset_audit.json').read_text())
-    if audit['status']!='passed' or audit['config_sha256']!=digest(config_path):
+    if audit['status']!='passed' or audit['config_sha256']!=prepared_hash:
         raise ValueError('Dataset audit/config mismatch')
     if ready.get('asset_lock_sha256')!=digest(root/'ASSET_LOCK.json'):
         raise ValueError('Prepared asset lock changed')

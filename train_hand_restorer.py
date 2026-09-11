@@ -543,8 +543,9 @@ def main() -> None:
         mixed_precision=train_cfg.get("mixed_precision", "no"),
         log_with="wandb" if train_cfg.get("use_wandb", False) else None,
     )
-    if config.get("comparison", {}).get("required_readiness") and accelerator.num_processes != 8:
-        raise ValueError("This controlled experiment requires the baseline's 8-rank layout")
+    if config.get("comparison", {}).get("required_readiness"):
+        if accelerator.num_processes != config["comparison"]["expected_world_size"]:
+            raise ValueError("World size differs from the explicitly selected comparison layout")
     data_format = config["data"].get("format", "raw_hot3d")
     if data_format == "derived_webdataset":
         data = config["data"]
