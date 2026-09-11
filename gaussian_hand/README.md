@@ -25,6 +25,10 @@ unauthorized and has not started**. See the
 [strict comparison runbook](reports/diffusion_strict_v2.md) for preparation
 outputs, runtime readiness checks and the frozen baseline contract.
 
+For presentation, use the [50-second demo](../outputs/gaussian_hand/result_videos/five_subjects_10s_each_clockwise90.mp4):
+the same five sequences, 10 seconds per subject, with each image panel rotated
+90 degrees clockwise while keeping the side-by-side layout and titles upright.
+
 See [the earlier pretraining report](reports/pretrain_v2.md) for per-hand
 counts, visual examples, limitations and commands. P0011/left has only 349
 accepted frames, and most hands have strongly imbalanced viewing directions.
