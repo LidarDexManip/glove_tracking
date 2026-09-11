@@ -38,6 +38,14 @@ degrees clockwise. All 750 live conditions match the prepared PNGs exactly
 before video encoding. Wrist blanking and adaptive crop behavior are retained;
 this is an input-data preview, not a diffusion model prediction.
 
+A [step-13,842 inference preview](../outputs/hand_restoration/hugg_aria_gaussian_surface_v2_4gpu/demos/step013842_five_training_frames/five_subjects_inference_preview.mp4)
+uses the fixed middle frame of those same five data-demo segments (20 denoising
+steps, seed7). Panels are Gaussian condition / raw diffusion output / target,
+individually rotated clockwise. This is a 15-second slideshow of five still
+predictions, not continuous motion or a baseline A/B evaluation. Full-resolution
+comparisons, raw predictions and separately pasted-back versions are saved
+alongside the video, with checkpoint hash and selection provenance in its manifest.
+
 See [the earlier pretraining report](reports/pretrain_v2.md) for per-hand
 counts, visual examples, limitations and commands. P0011/left has only 349
 accepted frames, and most hands have strongly imbalanced viewing directions.
