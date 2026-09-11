@@ -134,3 +134,8 @@ python -m scripts.evaluation.evaluate_hand_restorer --help
 ```
 
 Relative paths are resolved from the repository root. Run commands there.
+
+For matched-frame **MANO baseline vs Gaussian surface checkpoint video inference**,
+run `python compare_hugg_restorers_web.py --gpu 0 --port 7862`.
+See [the paired-video web guide](docs/PAIRED_VIDEO_WEB.md) for SSH access, input
+provenance, synchronized views, checkpoint selection, and GPU/cache behavior.
