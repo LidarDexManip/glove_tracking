@@ -55,7 +55,9 @@ def main():
     if done.exists():
         previous=json.loads(done.read_text())
         if any(previous.get(k)!=v for k,v in contract.items()):raise ValueError('Stale image archive')
-        if not (args.output/'images.tar').exists():raise FileNotFoundError('Missing image archive')
+        if not (args.output/'images.tar').exists():
+            raise FileNotFoundError('Full image archive absent (possibly intentionally compacted). '
+                                    'Re-export to a NEW --output directory; keep historical metadata unchanged.')
         print(json.dumps(previous));return
     if (args.output/'images.tar').exists():raise FileExistsError('Unverified image archive exists')
     start=time.monotonic();index=[];max_outside=0.;total_bytes=0

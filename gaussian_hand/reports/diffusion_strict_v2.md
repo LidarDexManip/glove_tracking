@@ -1,5 +1,11 @@
 # Gaussian vs. frozen MANO diffusion: strict input preparation
 
+Storage update: full visualization archives can be compacted into hash-verified
+regression samples; see [retention notes](../../docs/GAUSSIAN_ARCHIVE_RETENTION.md).
+The counts and audit statements below describe the original full preparation.
+The subsequent four-GPU run reused these inputs and completed training; this
+report's "training not started" language is a preparation-time snapshot.
+
 This supersedes the paused `diffusion_bridge_v2.md` investigation. No diffusion
 training is authorized or started by any preparation script. The long five-subject
 demo is complete: `outputs/gaussian_hand/result_videos/five_subjects_full_sequences.mp4`

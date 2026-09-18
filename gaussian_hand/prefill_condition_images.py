@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--reverse',action='store_true')
     parser.add_argument('--label',default='')
     args=parser.parse_args()
+    if (OUT/'ARCHIVE_RETENTION.json').exists():
+        raise RuntimeError('Visual archives intentionally compacted; use audit_prepared_diffusion_dataset --retained')
     if args.workers<1 or (args.label and not args.label.isalnum()):raise ValueError('Invalid worker count/label')
     suffix='_'+args.label if args.label else ''
     sequences=sorted(p.stem for p in (OUT/'manifests').glob('P*.jsonl'))

@@ -99,11 +99,13 @@ def validate_ready(config_path, world_size=None, resume=None):
         raise ValueError('Cached pretrained revision changed')
     for name,value in assets['assets'].items():
         if digest(snapshot/name)!=value:raise ValueError(f'Pretrained asset changed: {name}')
+    from gaussian_hand.archive_retention import validate_archive_storage
+    validate_archive_storage(root)
     for r in ready['rows']:
         seq=r['sequence']
         for relative,key in ((f'aligned/{seq}/_SUCCESS.json','render_success_sha256'),
                              (f'image_sequences/{seq}/_SUCCESS.json','images_success_sha256')):
             if digest(root/relative)!=r[key]:raise ValueError(f'Prepared metadata changed: {seq}')
-        for relative in (f'aligned/{seq}/reconstruction.mp4',f'aligned/{seq}/alpha.mkv',f'image_sequences/{seq}/images.tar'):
+        for relative in (f'aligned/{seq}/reconstruction.mp4',f'aligned/{seq}/alpha.mkv'):
             if not (root/relative).is_file():raise FileNotFoundError(root/relative)
     return ready

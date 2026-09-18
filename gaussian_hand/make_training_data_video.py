@@ -15,15 +15,10 @@ import torch
 
 from gaussian_hand.make_presentation_video import probe
 from train_hand_restorer import make_hugg_aria_dataset
+from gaussian_hand.archive_retention import REGRESSION_CLIPS, regression_archive
 
 ROOT = Path(__file__).resolve().parents[1]
-SELECTION = [
-    ('P0001_f6cc0cc8', 1018, 'right'),
-    ('P0002_65085bfc', 2553, 'left'),
-    ('P0009_0e02bf39', 1453, 'both'),
-    ('P0012_0323d770', 2262, 'both'),
-    ('P0014_24cb3bf0', 997, 'both'),
-]
+SELECTION = REGRESSION_CLIPS
 
 
 def u8(image):
@@ -64,7 +59,7 @@ def main():
         try:
             for sequence, start, side, indices in selections:
                 modes = set()
-                archive_path = ROOT / 'outputs/gaussian_hand/diffusion_strict_v2/image_sequences' / sequence / 'images.tar'
+                archive_path = regression_archive(ROOT / 'outputs/gaussian_hand/diffusion_strict_v2', sequence)
                 with tarfile.open(archive_path) as archive:
                     for offset, index in enumerate(indices):
                         row = dataset.samples[index]

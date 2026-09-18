@@ -13,12 +13,68 @@ from torch.utils.data import DataLoader, Subset
 
 from gaussian_hand.prepare_diffusion_strict import CONFIG, OUT, ROOT, digest
 from train_hand_restorer import make_hugg_aria_dataset
+from gaussian_hand.archive_retention import REGRESSION_CLIPS, RETENTION_FILE, validate_archive_storage
+
+
+def audit_retained():
+    """New sample audit; never overwrite the historical full-archive audit/READY."""
+    retention = validate_archive_storage(OUT)
+    if retention is None:
+        raise ValueError('No retained-sample manifest')
+    config = json.loads(CONFIG.read_text())
+    dataset = make_hugg_aria_dataset(config, ROOT / config['data']['train_manifest'], include_numpy=True)
+    first_by_subject = {}
+    selected = {}
+    count = 0
+    for seq, entry in retention['sequences'].items():
+        d = OUT / 'image_sequences' / seq
+        rows = [json.loads(line) for line in (d / 'samples.jsonl').read_text().splitlines()]
+        if [r['global_record_index'] for r in rows] != entry['record_indices']:
+            raise ValueError(f'Retained sample index mismatch: {seq}')
+        expected_names = [r[k] for r in rows for k in ('condition_member', 'overlay_member')]
+        with tarfile.open(d / 'samples.tar') as archive:
+            if [m.name for m in archive] != expected_names:
+                raise ValueError(f'Retained archive headers mismatch: {seq}')
+        count += len(rows)
+        subject = seq.split('_')[0]
+        if subject not in first_by_subject:
+            first_by_subject[subject] = rows[0]['global_record_index']
+            selected[rows[0]['global_record_index']] = seq
+        for r in rows:
+            source = dataset.samples[r['global_record_index']]
+            if any(source.get(k) != v for k, v in r.items()
+                   if k not in ('global_record_index', 'condition_member', 'overlay_member')):
+                raise ValueError(f'Retained crop identity mismatch: {seq}')
+            for clip_seq, start, side in REGRESSION_CLIPS:
+                if seq == clip_seq and r.get('adaptive_handedness') == side and r['frame_index'] in (start, start+75, start+149):
+                    selected[r['global_record_index']] = seq
+    for index, seq in sorted(selected.items()):
+        sample = dataset[index]
+        with tarfile.open(OUT / 'image_sequences' / seq / 'samples.tar') as archive:
+            content = archive.extractfile(f'{index:07d}.condition.png').read()
+        actual = cv2.imdecode(np.frombuffer(content, np.uint8), cv2.IMREAD_COLOR)
+        expected = (sample['condition_rgb_np'][..., ::-1] * 255).round().clip(0,255).astype(np.uint8)
+        if not np.array_equal(actual, expected):
+            raise ValueError(f'Retained/live condition mismatch: {seq}:{index}')
+    from gaussian_hand.diffusion_readiness import validate_ready
+    validate_ready(CONFIG)
+    report = {'status': 'passed', 'scope': 'retained archives and sampled live conditions; not a new full archive audit',
+              'retention_sha256': digest(OUT / RETENTION_FILE), 'retained_records': count,
+              'live_compared_records': len(selected), 'subjects': sorted(first_by_subject), 'max_pixel_delta': 0}
+    (OUT / 'retained_sample_audit.json').write_text(json.dumps(report, indent=2) + '\n')
+    print(json.dumps(report, indent=2))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wait-for-preparation', action='store_true')
+    parser.add_argument('--retained', action='store_true', help='Audit retained samples without changing historical READY/audit')
     args = parser.parse_args()
+    if args.retained:
+        torch.set_num_threads(1)
+        cv2.setNumThreads(1)
+        audit_retained()
+        return
     if args.wait_for_preparation:
         while True:
             state = json.loads((OUT / 'preparation_status.json').read_text())
@@ -27,6 +83,7 @@ def main():
             if state['status'] == 'ready':
                 break
             time.sleep(30)
+    validate_archive_storage(OUT, require_full=True)
     torch.set_num_threads(1)
     cv2.setNumThreads(1)
     config = json.loads(CONFIG.read_text())

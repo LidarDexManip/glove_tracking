@@ -27,6 +27,9 @@ def digest(path):
 
 
 def setup():
+    if (OUT/'ARCHIVE_RETENTION.json').exists():
+        raise RuntimeError('Prepared data have retained regression archives. Use the retained audit; '
+                           'prepare a different output/config for a new experiment.')
     freeze=json.loads((ROOT/'baselines/adaptive_splitcrop_v1/BASELINE_FREEZE.json').read_text())
     config=json.loads(BASELINE.read_text())
     assert digest(BASELINE)==freeze['configuration']['sha256']
