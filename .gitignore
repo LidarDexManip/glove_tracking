@@ -17,6 +17,7 @@ env/
 .huggingface/
 .uv-cache/
 external/
+/downloads/
 
 # Editors and operating systems
 .idea/

@@ -15,6 +15,7 @@ from hand_restoration.paired_video import ROOT,GAUSSIAN_CONFIG,absolute,save_jso
 from hand_restoration.hugg_aria_conditioning import paste_crop_with_mask
 from train_hand_restorer import make_hugg_aria_dataset
 from temporal_demos.motion import TemporalRestorer,ADAPTER
+from temporal_demos.stabilize import stabilize_brightness
 
 
 def video(path,frames,fps):
@@ -33,7 +34,7 @@ def video(path,frames,fps):
 
 
 def metrics(outputs,targets,masks):
-    mae=[];psnr=[];temporal=[]
+    mae=[];psnr=[];temporal=[];brightness=[]
     for i,(image,target,mask) in enumerate(zip(outputs,targets,masks)):
         diff=(image.astype(np.float32)-target.astype(np.float32))/255
         if mask.any():
@@ -49,9 +50,14 @@ def metrics(outputs,targets,masks):
             valid=mask & (warp(masks[i-1])>.99)
             valid=cv2.erode(valid.astype(np.uint8),np.ones((3,3),np.uint8)).astype(bool)
             residual=(image.astype(np.float32)-warp(outputs[i-1]))-(target.astype(np.float32)-warp(targets[i-1]))
-            if valid.any():temporal.append(float(np.abs(residual[valid]).mean()))
+            if valid.any():
+                temporal.append(float(np.abs(residual[valid]).mean()))
+                # Residual mean luminance change, after subtracting source lighting/motion.
+                luma=residual@np.array([.2126,.7152,.0722],np.float32)
+                brightness.append(float(abs(luma[valid].mean())))
     return dict(visible_hand_psnr=float(np.mean(psnr)),visible_hand_mae_255=float(np.mean(mae)),
         flow_compensated_temporal_residual_mae_255=float(np.mean(temporal)) if temporal else None,
+        brightness_flicker_mae_255=float(np.mean(brightness)) if brightness else None,
         note='Optical-flow temporal proxy; not a perceptual-quality guarantee. Selected training clips, not benchmark.')
 
 
@@ -60,26 +66,46 @@ def main():
     parser.add_argument('--selection',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--gpu',type=int,default=0)
+    parser.add_argument('--allow-shared-gpu',action='store_true',help='Explicitly permit sharing an occupied GPU')
+    parser.add_argument('--memory-limit-gib',type=float,default=16.,help='PyTorch allocator cap when sharing')
     parser.add_argument('--count',type=int,default=6)
     parser.add_argument('--pilot-frames',type=int,default=0)
     parser.add_argument('--strength',type=float,default=.25)
     parser.add_argument('--steps',type=int,default=20)
-    parser.add_argument('--scheduler',choices=['original','ddim','ddim-linear'],default='original')
+    parser.add_argument('--scheduler',choices=['original','ddim','ddim-linear','ddim-stable','ddpm-shared'],default='original')
     parser.add_argument('--refine-strength',type=float,default=0.)
+    parser.add_argument('--context',type=int,default=16)
+    parser.add_argument('--overlap',type=int,default=8)
+    parser.add_argument('--reference-strength',type=float,default=0.)
+    parser.add_argument('--reference-overlap',type=int,default=8)
+    parser.add_argument('--brightness-window',type=int,default=0)
+    parser.add_argument('--brightness-strength',type=float,default=.9)
     args=parser.parse_args()
+    if args.brightness_window and (args.scheduler!='original' or args.refine_strength or
+        args.strength!=args.reference_strength or args.overlap!=args.reference_overlap):
+        raise ValueError('Photometric comparison requires identical original sampling settings')
     if os.environ.get('CUDA_VISIBLE_DEVICES')!=str(args.gpu):raise ValueError('Set CUDA_VISIBLE_DEVICES to --gpu')
     lock=open(f'/tmp/glove_tracking_paired_gpu{args.gpu}_{os.getuid()}.lock','a')
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-    query=subprocess.check_output(['nvidia-smi','-i',str(args.gpu),'--query-gpu=memory.used,utilization.gpu',
+    query=subprocess.check_output(['nvidia-smi','-i',str(args.gpu),'--query-gpu=memory.used,utilization.gpu,memory.free',
                                    '--format=csv,noheader,nounits'],text=True)
-    memory,util=map(int,query.strip().split(','))
-    if memory>1024 or util>10:raise RuntimeError('Selected GPU is not idle')
+    memory,util,free_memory=map(int,query.strip().split(','))
+    if args.allow_shared_gpu:
+        if args.memory_limit_gib<=0:raise ValueError('Memory cap must be positive')
+        if free_memory<args.memory_limit_gib*1024+4096:
+            raise RuntimeError('Shared GPU requires allocator cap plus 4 GiB free headroom')
+    elif memory>1024 or util>10:raise RuntimeError('Selected GPU is not idle')
     torch.set_num_threads(1);cv2.setNumThreads(1)
-    torch.cuda.set_per_process_memory_fraction(.35)
+    fraction=(args.memory_limit_gib*2**30/torch.cuda.get_device_properties(0).total_memory
+              if args.allow_shared_gpu else .35)
+    torch.cuda.set_per_process_memory_fraction(fraction)
     selection=json.loads(absolute(args.selection).read_text())
     config=json.loads(GAUSSIAN_CONFIG.read_text())
     if sha256(GAUSSIAN_CONFIG)!=selection['config_sha256']:raise ValueError('Configuration changed')
     checkpoint=absolute(config['training']['output_dir'])/'controlnet_final.pt'
+    reference_key='previous_animatediff' if args.reference_strength else 'gaussian_only'
+    reference_label=(f'Raw AD s={args.reference_strength:g} c={args.context} o={args.reference_overlap}'
+                     if args.reference_strength else 'Gaussian diffusion only')
     output=absolute(args.output);output.mkdir(parents=True,exist_ok=False)
     clips=selection['selected'][:args.count]
     records=[]
@@ -97,39 +123,55 @@ def main():
         selection_sha256=sha256(absolute(args.selection)),adapter=ADAPTER,checkpoint_step=model.checkpoint_step,
         adapter_weights=str(adapter_path),adapter_sha256=sha256(adapter_path),motion_layers=model.motion_layers,
         gpu=args.gpu,steps=args.steps,motion_strength=args.strength,fps=selection['fps'],seed=7,
-        dtype='bfloat16',scheduler=dict(model.model.noise_scheduler.config),context=16,overlap=8,
+        shared_gpu=args.allow_shared_gpu,allocator_limit_gib=args.memory_limit_gib if args.allow_shared_gpu else None,
+        gpu_start=dict(used_mib=memory,free_mib=free_memory,utilization=util),
+        dtype='bfloat16',scheduler=dict(model.model.noise_scheduler.config),context=args.context,overlap=args.overlap,
         animatediff_scheduler=args.scheduler,refine_strength=args.refine_strength,
+        reference_key=reference_key,reference_label=reference_label,
+        reference_strength=args.reference_strength,reference_overlap=args.reference_overlap,
+        postprocess=dict(kind='brightness_only' if args.brightness_window else 'none',
+            window=args.brightness_window,strength=args.brightness_strength,
+            uses_target_rgb=False,frame_blending=False),
         extra_training=False,initial_noise='shared across frames; identical random draws in addon off/on',
-        code={p:sha256(ROOT/p) for p in ('temporal_demos/motion.py','temporal_demos/render_clips.py')},
+        code={p:sha256(ROOT/p) for p in ('temporal_demos/motion.py','temporal_demos/render_clips.py','temporal_demos/stabilize.py')},
         scope='Inference-only demo; new fixed temporal crop; not frozen baseline benchmark. Native orientation inference.'))
     reports=[];sheets=[];combined=[]
     for clip in clips:
         directory=output/clip['id'];directory.mkdir()
-        conditions=[];masks=[];targets=[];visible=[];fractions=[]
+        conditions=[];masks=[];targets=[];visible=[];fractions=[];edits=[]
         for j in range(len(clip['render_records'])):
             s=dataset[clip['offset']+j]
             conditions.append(s['condition_rgb_np']);masks.append(s['condition_mask_np'])
             targets.append((s['target_rgb_np']*255).round().astype(np.uint8))
             visible.append(s['visible_hand_mask_np'].astype(bool))
+            edits.append(s['edit_mask_np'])
             fractions.append(float(visible[-1].sum()/max(s['mano_mask_np'].sum(),1)))
         if min(fractions)<.70 or np.percentile(fractions,10)<.80:
             save_json(directory/'SKIPPED.json',dict(reason='Dense mask screening failed',visible_ratios=fractions))
             print('SKIPPED',clip['id'],min(fractions),flush=True);continue
         encoded=model.encode(conditions,masks)
         generated={}
-        for name,strength in [('gaussian_only',0.),('animatediff',args.strength)]:
+        for name,strength in [(reference_key,args.reference_strength),('animatediff',args.strength)]:
             began=time.monotonic()
+            if name=='animatediff' and args.brightness_window:
+                generated[name],stabilization=stabilize_brightness(generated[reference_key],conditions,
+                    visible,edits,window=args.brightness_window,strength=args.brightness_strength)
+                save_json(directory/'brightness_stabilization.json',stabilization)
+                video(directory/f'{name}_crop.mp4',[cv2.rotate(f,cv2.ROTATE_90_CLOCKWISE) for f in generated[name]],selection['fps'])
+                continue
             generated[name]=model.generate(encoded,strength=strength,steps=args.steps,seed=7,
                 scheduler_kind=args.scheduler if name=='animatediff' else 'original',
-                initial_rgb=generated.get('gaussian_only') if name=='animatediff' and args.refine_strength else None,
+                initial_rgb=generated.get(reference_key) if name=='animatediff' and args.refine_strength else None,
                 denoise_strength=args.refine_strength,
+                context_size=args.context,overlap=args.overlap if name=='animatediff' else args.reference_overlap,
                 progress=lambda step,total: print(clip['id'],name,step,total,flush=True) if step%5==0 else None)
             print('TIMING',name,time.monotonic()-began,flush=True)
             video(directory/f'{name}_crop.mp4',[cv2.rotate(f,cv2.ROTATE_90_CLOCKWISE) for f in generated[name]],selection['fps'])
         panels=[];full=[]
-        for j,(single,animated) in enumerate(zip(generated['gaussian_only'],generated['animatediff'])):
+        for j,(single,animated) in enumerate(zip(generated[reference_key],generated['animatediff'])):
             images=[targets[j],(conditions[j]*255).round().astype(np.uint8),single,animated]
-            titles=['Original','Gaussian condition','Gaussian diffusion only','+ AnimateDiff']
+            titles=['Original','Gaussian condition',reference_label,
+                    'AD + brightness stabilization' if args.brightness_window else '+ AnimateDiff / '+args.scheduler]
             canvas=np.zeros((576,2048,3),np.uint8)
             for k,(im,title) in enumerate(zip(images,titles)):
                 canvas[64:,k*512:(k+1)*512]=cv2.rotate(im,cv2.ROTATE_90_CLOCKWISE)

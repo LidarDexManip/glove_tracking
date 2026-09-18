@@ -20,6 +20,30 @@ def context_windows(frames, size=16, overlap=8):
     return [list(range(start,start+size)) for start in starts]
 
 
+def shared_ddpm_step(scheduler,prediction,timestep,sample,generator):
+    """Diffusers' epsilon/fixed-small posterior, with one noise field per clip.
+
+    The marginal per-frame posterior is unchanged. Only cross-frame noise
+    covariance changes. Single-frame output matches DDPMScheduler.step.
+    """
+    if (scheduler.config.prediction_type!='epsilon' or scheduler.config.variance_type!='fixed_small'
+            or scheduler.config.clip_sample or scheduler.config.thresholding or sample.ndim!=5):
+        raise ValueError('Shared DDPM supports unclipped epsilon/fixed_small BCFHW only')
+    t=timestep;previous=scheduler.previous_timestep(t)
+    alpha=scheduler.alphas_cumprod[t]
+    alpha_previous=scheduler.alphas_cumprod[previous] if previous>=0 else scheduler.one
+    beta=1-alpha;beta_previous=1-alpha_previous
+    current_alpha=alpha/alpha_previous;current_beta=1-current_alpha
+    predicted_clean=(sample-beta.sqrt()*prediction)/alpha.sqrt()
+    result=(alpha_previous.sqrt()*current_beta/beta)*predicted_clean
+    result=result+(current_alpha.sqrt()*beta_previous/beta)*sample
+    if t>0:
+        noise=torch.randn((sample.shape[0],sample.shape[1],1,*sample.shape[-2:]),
+                          generator=generator,device=sample.device,dtype=sample.dtype)
+        result=result+scheduler._get_variance(t).sqrt()*noise
+    return result
+
+
 class TemporalRestorer:
     def __init__(self,config,checkpoint,device='cuda',dtype=torch.bfloat16):
         from diffusers import MotionAdapter,UNetMotionModel
@@ -64,17 +88,20 @@ class TemporalRestorer:
 
     @torch.inference_mode()
     def generate(self,encoded,*,strength=1.,steps=20,seed=7,progress=None,
-                 scheduler_kind='original',initial_rgb=None,denoise_strength=.35):
+                 scheduler_kind='original',initial_rgb=None,denoise_strength=.35,
+                 context_size=16,overlap=8):
         if not 0<=strength<=1:raise ValueError('Motion strength must be 0..1')
         self.strength=float(strength)
         frames=encoded.shape[0]
-        windows=context_windows(frames)
-        if scheduler_kind=='original':
+        if context_size>32:raise ValueError('Adapter positional encoding supports at most 32 frames')
+        windows=context_windows(frames,context_size,overlap)
+        if scheduler_kind in ('original','ddpm-shared'):
             scheduler=self.model.noise_scheduler
-        elif scheduler_kind in ('ddim','ddim-linear'):
+        elif scheduler_kind in ('ddim','ddim-linear','ddim-stable'):
             from diffusers import DDIMScheduler
             kwargs=dict(clip_sample=False,timestep_spacing='linspace')
             if scheduler_kind=='ddim-linear':kwargs['beta_schedule']='linear'
+            if scheduler_kind=='ddim-stable':kwargs['timestep_spacing']='leading'
             scheduler=DDIMScheduler.from_config(self.model.noise_scheduler.config,**kwargs)
         else:raise ValueError('Unknown scheduler')
         scheduler.set_timesteps(steps,device=self.device)
@@ -115,7 +142,10 @@ class TemporalRestorer:
                 weights[:,:,indices]+=w
             if not torch.all(weights>0):raise AssertionError('Uncovered temporal frame')
             predicted=(prediction/weights).to(self.dtype)
-            latents=scheduler.step(predicted,t,latents,generator=generator).prev_sample
+            if scheduler_kind=='ddpm-shared':
+                latents=shared_ddpm_step(scheduler,predicted,t,latents,generator)
+            else:
+                latents=scheduler.step(predicted,t,latents,generator=generator).prev_sample
             if not torch.isfinite(latents).all():raise RuntimeError('Nonfinite temporal output')
             if progress is not None:progress(step+1,len(timesteps))
         flat=latents.permute(0,2,1,3,4).reshape(frames,4,*latents.shape[-2:])
