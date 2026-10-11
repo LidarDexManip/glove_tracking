@@ -116,7 +116,7 @@ must not be treated as ready simply because the config exists.
 
 ## Commands
 
-Use the existing `/data/szeng87/venvs/gaussian-hand` environment, from repo root.
+Use the existing `glove-hot3d` Conda environment, from repo root.
 The read-only final checks are:
 
 ```bash

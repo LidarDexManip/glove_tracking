@@ -68,7 +68,7 @@ snapshot, not a claim that training has finished.
 Launch (explicit user training authorization required):
 
 ```bash
-source /data/szeng87/venvs/gaussian-hand/bin/activate
+conda activate glove-hot3d
 python -m gaussian_hand.launch_diffusion_strict --four-gpu --execute
 ```
 

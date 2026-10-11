@@ -1,0 +1,65 @@
+{
+  "seed": 7,
+  "data": {
+    "format": "derived_webdataset",
+    "cache_kind": "task_overlay_png_v1",
+    "train_manifest": "outputs/hand_restoration/overfit14_gaussian_overlay_sam31_v1/train_manifest.jsonl",
+    "val_manifest": "outputs/hand_restoration/overfit14_gaussian_overlay_sam31_v1/seen_eval_manifest.jsonl",
+    "output_size": 512,
+    "grayscale": false
+  },
+  "model": {
+    "base_model_id": "runwayml/stable-diffusion-v1-5",
+    "controlnet_model_id": null,
+    "prompt": "a realistic egocentric image of black gloved hands performing a clinical task",
+    "negative_prompt": "",
+    "conditioning_mode": "latent_mask"
+  },
+  "training": {
+    "output_dir": "outputs/hand_restoration/overfit14_gaussian_sam31_v1",
+    "num_train_epochs": 10,
+    "max_train_steps": 5000,
+    "batch_size": 32,
+    "validation_batch_size": 8,
+    "gradient_accumulation_steps": 1,
+    "mixed_precision": "bf16",
+    "learning_rate": 5e-06,
+    "lr_scheduler": "constant_with_warmup",
+    "warmup_steps": 100,
+    "weight_decay": 0.01,
+    "max_grad_norm": 1.0,
+    "hand_loss_weight": 10.0,
+    "chunk_shuffle_frames": 150,
+    "num_workers": 2,
+    "shuffle": false,
+    "pin_memory": true,
+    "persistent_workers": true,
+    "prefetch_factor": 2,
+    "max_validation_samples": null,
+    "log_every": 10,
+    "csv_log_every": 1,
+    "loss_ema_decay": 0.98,
+    "checkpoint_every": 500,
+    "save_full_state": true,
+    "full_state_keep_last": 2,
+    "validation_every": 250,
+    "validation_seed": 7,
+    "use_wandb": false,
+    "allow_exact_target_extension": true,
+    "background_loss_weight": 1.0
+  },
+  "inference": {
+    "steps": 20,
+    "guidance_scale": 1.0,
+    "controlnet_scale": 1.0
+  },
+  "experiment": {
+    "purpose": "overfit all 14 task sessions; 6300 source frames; no held-out split",
+    "world_size": 4,
+    "effective_batch_size": 128,
+    "learning_from": "bare-hand adaptive-splitcrop baseline; constant LR, hand loss 10, background loss 1, fresh SD1.5 ControlNet",
+    "prepared_data": "lossless PNG crops; all source frames retained",
+    "initial_budget": 5000,
+    "convergence_policy": "assess fixed seen loss and fixed-seed visual reconstruction, extend exact trainer state if still improving; completing 5000 updates alone does not establish convergence"
+  }
+}

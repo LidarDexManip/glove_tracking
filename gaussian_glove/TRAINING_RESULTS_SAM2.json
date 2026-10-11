@@ -1,0 +1,67 @@
+{
+  "format_version": 1,
+  "completed_on": "2026-09-22",
+  "environment": "conda:glove-hot3d",
+  "segmentation": {
+    "model": "SAM2.1 Hiera Large video predictor",
+    "checkpoint": "model/sam2/sam2.1_hiera_large.pt",
+    "checkpoint_sha256": "2647878d5dfa5098f2f8649825738a9345572bae2d4350a2468587ece47dd318",
+    "source_video_frames": 4034,
+    "policy": "Bidirectional chunked tracking from MANO-projected box prompts."
+  },
+  "dataset": {
+    "mask_policy": "RGB/SSIM supervision uses SAM2 glove mask intersected with exact fixed-shape MANO silhouette; geometry and alpha use full MANO support.",
+    "left_frames": 3127,
+    "right_frames": 1389,
+    "left_sam_mano_coverage": {
+      "min": 0.6971268890423499,
+      "p05": 0.8133443723137135,
+      "median": 0.9600358652491354,
+      "p95": 0.9889921389816261,
+      "max": 0.9988229156913364,
+      "mean": 0.9419893568107215
+    },
+    "right_sam_mano_coverage": {
+      "min": 0.773050826921912,
+      "p05": 0.8332276226267481,
+      "median": 0.9285631383472609,
+      "p95": 0.9858996027706762,
+      "max": 0.9950852576488023,
+      "mean": 0.9240132606640787
+    },
+    "exact_intersection_validation": "All 4516 exported masks equal pixelwise MANO & SAM2 and are non-empty."
+  },
+  "schedule": "Two concurrent single-GPU runs, 120000 optimizer steps and frame updates per hand.",
+  "left": {
+    "checkpoint": "gaussian_glove/outputs/black_glove_left_sam2_120k/step_120000.pt",
+    "checkpoint_sha256": "94ad0e91103a9ce54db71c194147cfc349d20d8b6b7074e13bb7ef1c3fb071c0",
+    "checkpoint_bytes": 5339647,
+    "steps": 120000,
+    "resume_checkpoint_step": 10000,
+    "elapsed_seconds_after_resume": 3367.7962528909557,
+    "final_gaussians": 19818,
+    "fixed_32_frame_visible_mano_reference_psnr": 22.35273788414454,
+    "all_frame_visible_mano_reference_psnr": 21.866373270379725,
+    "all_frame_black_background_crop_psnr": 25.19494303249685,
+    "all_frame_mano_alpha_iou": 1.0
+  },
+  "right": {
+    "checkpoint": "gaussian_glove/outputs/black_glove_right_sam2_120k/step_120000.pt",
+    "checkpoint_sha256": "c6bdb31799f681289cf185aed6b041032358201c907678b9f30d95111ae043b4",
+    "checkpoint_bytes": 4984191,
+    "steps": 120000,
+    "elapsed_seconds": 3917.6713224970736,
+    "final_gaussians": 19811,
+    "fixed_32_frame_visible_mano_reference_psnr": 26.759884989777735,
+    "all_frame_visible_mano_reference_psnr": 26.51521941389824,
+    "all_frame_black_background_crop_psnr": 26.081511097470873,
+    "all_frame_mano_alpha_iou": 0.9999999880275767
+  },
+  "previews": {
+    "sam2_review": "gaussian_glove/outputs/sam2_pilot_session015.mp4",
+    "source_overlay": "gaussian_glove/outputs/session_015_sam2_overlay_preview/session_015_gaussian_overlay.mp4",
+    "aria_overlay": "gaussian_glove/outputs/aria_black_glove_overlay_P0010_sam2/P0010_573b2de6_black_glove_aria_overlay.mp4"
+  },
+  "evaluation_policy": "All metrics are training-set appearance diagnostics; no held-out claim. SAM2-reference metrics are not directly comparable to legacy MANO-only reference metrics because the evaluated pixel region changed.",
+  "regression_tests": "99 passed, 1 CUDA-only test skipped because the final regression run intentionally hid GPUs."
+}

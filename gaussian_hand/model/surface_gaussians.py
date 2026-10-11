@@ -53,11 +53,17 @@ class GaussianHand(nn.Module):
 
     def __init__(self, mano_model_path: str, betas: torch.Tensor,
                  gaussians_per_face: int = 4, normal_offset_max: float = 0.003,
-                 handedness: str = "right", strict_surface: bool = False) -> None:
+                 handedness: str = "right", strict_surface: bool = False,
+                 pose_representation: str = "pca", bounded_scales: bool = False) -> None:
         super().__init__()
-        self.mano = LearnableMANO(mano_model_path, handedness=handedness)
+        self.mano = LearnableMANO(
+            mano_model_path, handedness=handedness,
+            pose_representation=pose_representation)
         self.handedness = handedness
+        self.pose_representation = pose_representation
+        self.pose_dim = self.mano.pose_dim
         self.strict_surface = strict_surface
+        self.bounded_scales = bounded_scales
         if strict_surface:
             self.mano.canonical_delta.requires_grad_(False)
         self.register_buffer("subject_betas", betas.detach().clone().reshape(1, -1))
@@ -78,14 +84,15 @@ class GaussianHand(nn.Module):
         self.albedo_logits = nn.Parameter(torch.zeros(count, 3))
         self.normal_offset_logits = nn.Parameter(torch.full((count,), -5.0))
         self.normal_offset_max = 0.0 if strict_surface else float(normal_offset_max)
-        self.lighting = PoseLighting()
+        self.lighting = PoseLighting(self.pose_dim + 3)
 
     @classmethod
     def from_config(cls, config, betas, root):
         return cls(str(root / config["mano_model"]), betas,
                    int(config["gaussians_per_face"]), float(config["normal_offset_max_m"]),
                    config.get("binding", {}).get("handedness", "right"),
-                   bool(config.get("strict_surface", False)))
+                   bool(config.get("strict_surface", False)),
+                   config.get("pose_representation", "pca"), bool(config.get("bounded_scales", False)))
 
     def load_resizable_state_dict(self, state_dict: dict) -> None:
         """Load a checkpoint after adaptive control changed Gaussian count."""
@@ -166,7 +173,7 @@ class GaussianHand(nn.Module):
     @torch.no_grad()
     def adaptive_density_control(self, optimizer: torch.optim.Optimizer,
                                  scores: torch.Tensor, split_fraction: float,
-                                 max_gaussians: int,
+                                 max_gaussians: int | None,
                                  opacity_threshold: float = 0.02) -> dict:
         """Split high-gradient surfels and prune transparent ones."""
         old_count=self.gaussian_count
@@ -175,8 +182,10 @@ class GaussianHand(nn.Module):
         keep=torch.sigmoid(self.opacity_logits) >= opacity_threshold
         if int(keep.sum()) < max(256,old_count//2):
             keep=torch.ones_like(keep)
-        capacity=max(0,max_gaussians-int(keep.sum()))
-        split_count=min(capacity,max(1,int(old_count*split_fraction)))
+        split_count=max(1,int(old_count*split_fraction))
+        if max_gaussians is not None:
+            capacity=max(0,max_gaussians-int(keep.sum()))
+            split_count=min(capacity,split_count)
         eligible=torch.where(keep)[0]
         if split_count:
             split=eligible[torch.topk(scores[eligible],min(split_count,len(eligible))).indices]
@@ -243,7 +252,7 @@ class GaussianHand(nn.Module):
             torch.stack((cosine, -sine), -1),
             torch.stack((sine, cosine), -1)), -2)
         scale2 = self.log_scales.exp()
-        if self.strict_surface:
+        if self.strict_surface or self.bounded_scales:
             edges = torch.stack((tri_c[:, 1]-tri_c[:, 0], tri_c[:, 2]-tri_c[:, 1],
                                  tri_c[:, 0]-tri_c[:, 2]), 1)
             twice_area = torch.cross(edges[:, 0], -edges[:, 2], dim=-1).norm(dim=-1)

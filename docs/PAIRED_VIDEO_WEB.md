@@ -8,7 +8,7 @@
 
 ```bash
 cd /home/szeng87/glove_tracking
-source /data/szeng87/venvs/gaussian-hand/bin/activate
+conda activate glove-hot3d
 python compare_hugg_restorers_web.py --gpu 0 --port 7862
 ```
 

@@ -122,7 +122,7 @@ def evaluate(model, dataset, device, resolution, loss_config, max_frames=32):
             model, x["mano_pca"], x["wrist_q_wxyz"], x["wrist_t_world"],
             x["world_to_camera"], x["intrinsics"], resolution, resolution)
         loss, _ = reconstruction_loss(
-            render, x["image"], x["mask"], **loss_config)
+            render, x["image"], x["mask"], supervision=x["supervision"] if x.get("has_supervision", False) else None, **loss_config)
         target = x["image"] * x["mask"]
         if "mesh_mask" in render:
             target = x["image"] * render["mesh_mask"]
@@ -131,7 +131,7 @@ def evaluate(model, dataset, device, resolution, loss_config, max_frames=32):
             reference = render["mesh_mask"] * x["mask"]
             mses.append(float(((render["rgb"]-x["image"]).square()*reference).sum() / (3*reference.sum()).clamp_min(1)))
         else:
-            mses.append(float((render["rgb"] - target).square().mean()))
+            mses.append(float(((render["rgb"] - target).square()*x["supervision"]).sum()/(3*x["supervision"].sum()).clamp_min(1)))
     model.train()
     mse = max(float(np.mean(mses)), 1e-12)
     return {"frames": len(indices), "reconstruction_loss": float(np.mean(losses)),
@@ -196,7 +196,12 @@ def main():
     resolution = args.resolution or int(config["resolution"])
     dataset_root = resolve(config["dataset_root"])
     dataset = GaussianHandDataset(
-        dataset_root, config.get("training_split", "train"), resolution)
+        dataset_root, config.get("training_split", "train"), resolution, require_quality=config.get("require_quality_pass", False))
+    if config.get('require_quality_pass', False):
+        summary = json.loads((dataset_root/'summary.json').read_text())
+        source = json.loads((ROOT/'gaussian_glove/SOURCE.json').read_text())
+        if summary['source_revision'] != source['revision'] or summary['offset_max_m'] != config['normal_offset_max_m']:
+            raise ValueError('Training source or thickness bound differs from preparation')
     device_betas = torch.tensor(
         json.loads((dataset_root / "frames.jsonl").open().readline())["mano_betas"],
         dtype=torch.float32)
@@ -208,7 +213,14 @@ def main():
            for r in dataset.records):
         raise ValueError("Training dataset has inconsistent subject MANO shape")
     model = GaussianHand.from_config(config, device_betas, ROOT).to(device)
-    pose_refinement = PoseRefinement(len(dataset)).to(device)
+    pose_refinement = PoseRefinement(len(dataset), model.pose_dim).to(device)
+    if config.get('freeze_canonical_mesh', False): model.mano.canonical_delta.requires_grad_(False)
+    if config.get('freeze_pose', False): pose_refinement.requires_grad_(False)
+    if config.get('offset_only', False):
+        if (config.get('strict_surface') or config['normal_offset_max_m'] <= 0
+                or not config.get('freeze_pose') or not config.get('freeze_canonical_mesh')
+                or config['learning_rates']['pose_delta'] != 0 or config['learning_rates']['canonical_mesh'] != 0):
+            raise ValueError('Offset-only contract requires bounded offsets and frozen shape/pose')
     if config.get("strict_surface"):
         if any(config["learning_rates"][k] != 0 for k in ("canonical_mesh", "pose_delta")):
             raise ValueError("Strict MANO overlay training freezes geometry and input poses")
@@ -220,6 +232,8 @@ def main():
             raise ValueError("Resume checkpoint model_id mismatch")
         if resume.get("binding") != binding:
             raise ValueError("Resume checkpoint subject/hand binding mismatch")
+        for key in ('offset_only', 'normal_offset_max_m', 'freeze_pose', 'freeze_canonical_mesh', 'bounded_scales'):
+            if resume['config'].get(key) != config.get(key): raise ValueError('Resume geometry contract mismatch: ' + key)
         if bool(resume["config"].get("strict_surface", False)) != bool(config.get("strict_surface", False)):
             raise ValueError("Resume checkpoint geometry contract mismatch")
         current_manifest_hash = hashlib.sha256(
@@ -249,6 +263,17 @@ def main():
     start_step = 0
     if resume is not None:
         optimizer.load_state_dict(resume["optimizer"])
+        # Explicit fine-tuning mode: keep Adam moments, use the new run's LRs.
+        # Default resume behavior remains unchanged for existing experiments.
+        if config.get("resume_use_config_learning_rates", False):
+            lr_keys = ("surface", "albedo", "opacity", "canonical_mesh", "lighting", "pose_delta")
+            if len(optimizer.param_groups) != len(lr_keys):
+                raise ValueError("Unexpected optimizer groups for configured resume learning rates")
+            for group, key in zip(optimizer.param_groups, lr_keys):
+                group["lr"] = float(lr[key])
+            if is_main:
+                print(json.dumps({"resume_learning_rates": {key: group["lr"]
+                    for key, group in zip(lr_keys, optimizer.param_groups)}}), flush=True)
         start_step = int(resume["step"])
 
     if is_main:
@@ -294,7 +319,9 @@ def main():
             tensors["world_to_camera"], tensors["intrinsics"],
             resolution, resolution)
         loss, parts = reconstruction_loss(
-            render, tensors["image"], tensors["mask"], **config["loss"])
+            render, tensors["image"], tensors["mask"], supervision=tensors["supervision"] if tensors.get("has_supervision", False) else None, **config["loss"])
+        if config.get('offset_only', False):
+            loss = loss + config.get('offset_regularization', .001) * torch.sigmoid(model.normal_offset_logits).square().mean()
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         if step < int(config.get("canonical_mesh_start_step", 0)):
@@ -309,13 +336,17 @@ def main():
             parameters, 10.0, error_if_nonfinite=True)
         optimizer.step()
         with torch.no_grad():
-            model.log_scales.clamp_(-10.0, -3.0)
-            model.barycentric_logits.clamp_(-12.0, 12.0)
+            # Appearance-only continuation must preserve the loaded geometry,
+            # including parameters created by the previous run's final split.
+            if optimizer.param_groups[0]["lr"] != 0:
+                model.log_scales.clamp_(-10.0, -3.0)
+                model.barycentric_logits.clamp_(-12.0, 12.0)
             model.opacity_logits.clamp_(-12.0, 12.0)
             model.mano.canonical_delta.clamp_(-0.001, 0.001)
-            pose_refinement.deltas.weight[:, :15].clamp_(-0.5, 0.5)
-            pose_refinement.deltas.weight[:, 15:18].clamp_(-0.2, 0.2)
-            pose_refinement.deltas.weight[:, 18:21].clamp_(-0.01, 0.01)
+            pose_dim = pose_refinement.pose_dim
+            pose_refinement.deltas.weight[:, :pose_dim].clamp_(-0.5, 0.5)
+            pose_refinement.deltas.weight[:, pose_dim:pose_dim+3].clamp_(-0.2, 0.2)
+            pose_refinement.deltas.weight[:, pose_dim+3:pose_dim+6].clamp_(-0.01, 0.01)
 
         if step == 6:
             torch.cuda.synchronize(device)
@@ -324,10 +355,11 @@ def main():
             measured_steps += 1
         if adaptive_every and step % adaptive_every == 0:
             control = config.get("adaptive_control", {})
+            max_gaussians = control.get("max_gaussians", 20000)
             density = model.adaptive_density_control(
                 optimizer, gradient_scores / max(gradient_samples, 1),
                 float(control.get("split_fraction", .05)),
-                int(control.get("max_gaussians", 20000)),
+                None if max_gaussians is None else int(max_gaussians),
                 float(control.get("opacity_prune_threshold", .02)
                       if step >= int(control.get("prune_start_step", 10000))
                       else 0))

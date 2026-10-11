@@ -44,6 +44,31 @@ def test_sam_forearm_pixels_do_not_change_geometry_or_color_loss():
     assert rgb.grad[support[...,0] == 0].abs().max() == 0
 
 
+def test_mano_pixels_outside_sam_do_not_change_color_loss():
+    from gaussian_hand.losses import reconstruction_loss
+    torch.manual_seed(5)
+    image = torch.rand(40, 40, 3)
+    support = torch.zeros(40, 40, 1)
+    support[5:35, 5:35] = 1
+    sam = torch.zeros_like(support)
+    sam[10:30, 10:30] = 1
+    rgb = (torch.rand(40, 40, 3) * support).requires_grad_()
+    render = {
+        "rgb": rgb,
+        "alpha": support * .9,
+        "mesh_mask": support,
+        "distortion": torch.zeros_like(support),
+    }
+    loss, _ = reconstruction_loss(render, image, sam)
+    changed = image.clone()
+    ignored = (support[..., 0] > 0) & (sam[..., 0] == 0)
+    changed[ignored] = 10
+    other, _ = reconstruction_loss(render, changed, sam)
+    torch.testing.assert_close(loss, other)
+    loss.backward()
+    assert rgb.grad[ignored].abs().max() == 0
+
+
 def test_premultiplied_overlay_preserves_background_outside_support():
     from gaussian_hand.render import composite_over_background
     background = torch.rand(8,8,3)

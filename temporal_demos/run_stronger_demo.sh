@@ -19,7 +19,8 @@ if [[ $# -eq 3 ]]; then
     demo_shared=(--allow-shared-gpu --memory-limit-gib 16)
 fi
 cd /home/szeng87/glove_tracking
-source /data/szeng87/venvs/gaussian-hand/bin/activate
+source /home/shaoyu/miniconda3/etc/profile.d/conda.sh
+conda activate glove-hot3d
 export CUDA_VISIBLE_DEVICES="$demo_gpu"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 exec python -u -m temporal_demos.render_clips \

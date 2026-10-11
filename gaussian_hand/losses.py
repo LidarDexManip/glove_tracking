@@ -15,7 +15,18 @@ def ssim(x: torch.Tensor, y: torch.Tensor, window: int = 11, reduction=True) -> 
     return score.mean() if reduction else score.mean(1)[0]
 
 def reconstruction_loss(render, image, mask, dssim_weight=.2,
-                        alpha_weight=.1, distortion_weight=1e-4):
+                        alpha_weight=.1, distortion_weight=1e-4, supervision=None):
+    if supervision is not None and "mesh_mask" not in render:
+        target = image * mask
+        valid = supervision[..., 0]
+        l1 = ((render['rgb']-target).abs()*supervision).sum()/(3*supervision.sum()).clamp_min(1)
+        full_window = (F.avg_pool2d(valid[None,None],11,1,5)[0,0]>.999).float()
+        score = ssim(render['rgb'],target,reduction=False)
+        dssim = ((1-score)*full_window).sum()/full_window.sum().clamp_min(1)
+        alpha = ((render['alpha']-mask).abs()*supervision).sum()/supervision.sum().clamp_min(1)
+        distortion = (render['distortion'].abs()*supervision).sum()/supervision.sum().clamp_min(1)
+        total = (1-dssim_weight)*l1+dssim_weight*dssim+alpha_weight*alpha+distortion_weight*distortion
+        return total, {'l1':l1,'dssim':dssim,'alpha':alpha,'distortion':distortion}
     if "mesh_mask" in render:
         support = render["mesh_mask"]
         reference = mask * support

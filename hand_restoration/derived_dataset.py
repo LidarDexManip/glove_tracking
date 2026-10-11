@@ -31,6 +31,8 @@ class DerivedHandRestorationDataset(Dataset):
         seed: int = 0,
         include_numpy: bool = False,
         mask_member: str = "mask.png",
+        mask_as_condition_mask: bool = False,
+        mask_as_loss_mask: bool = False,
     ) -> None:
         self.manifest_path = Path(manifest)
         if not self.manifest_path.is_file():
@@ -45,6 +47,8 @@ class DerivedHandRestorationDataset(Dataset):
         if mask_member not in {"mask.png", "visible_mask.png"}:
             raise ValueError("mask_member must be mask.png or visible_mask.png")
         self.mask_member = mask_member
+        self.mask_as_condition_mask = bool(mask_as_condition_mask)
+        self.mask_as_loss_mask = bool(mask_as_loss_mask)
         self.condition_builder = ConditionBuilder(condition or ConditionConfig(), seed=seed)
         self._tar_handles: dict[Path, tarfile.TarFile] = {}
 
@@ -96,10 +100,11 @@ class DerivedHandRestorationDataset(Dataset):
         target_rgb = target_rgb.astype(np.float32) / 255.0
         mano_rgb = mano_rgb.astype(np.float32) / 255.0
         condition_rgb, edit_mask = self.condition_builder(target_rgb, mano_rgb, mask)
+        mask_tensor = torch.from_numpy(mask[None])
         result = {
             "target_rgb": torch.from_numpy(target_rgb.transpose(2, 0, 1) * 2.0 - 1.0),
             "mano_rgb": torch.from_numpy(mano_rgb.transpose(2, 0, 1) * 2.0 - 1.0),
-            "mano_mask": torch.from_numpy(mask[None]),
+            "mano_mask": mask_tensor,
             "condition_rgb": torch.from_numpy(condition_rgb.transpose(2, 0, 1) * 2.0 - 1.0),
             "edit_mask": torch.from_numpy(edit_mask[None].astype(np.float32)),
             "metadata": {
@@ -112,6 +117,10 @@ class DerivedHandRestorationDataset(Dataset):
                 "original_image_size": record["canonical_image_size"],
             },
         }
+        if self.mask_as_condition_mask:
+            result["condition_mask"] = mask_tensor
+        if self.mask_as_loss_mask:
+            result["loss_mask"] = mask_tensor
         if self.include_numpy:
             result.update({"target_rgb_np": target_rgb, "mano_rgb_np": mano_rgb, "mano_mask_np": mask,
                            "geometry_mask_np": geometry_mask, "condition_rgb_np": condition_rgb,

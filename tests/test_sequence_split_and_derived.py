@@ -9,9 +9,11 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import torch
 
 from hand_restoration.conditions import ConditionConfig
 from hand_restoration.derived_dataset import DerivedHandRestorationDataset
+from hand_restoration.inference import load_sample
 
 
 class SequenceSplitAndDerivedTests(unittest.TestCase):
@@ -64,6 +66,30 @@ class SequenceSplitAndDerivedTests(unittest.TestCase):
             self.assertGreater(float(sample["mano_mask"].sum()), 0)
             self.assertEqual(sample["metadata"]["camera_id"], "1201-2")
 
+            inference_sample = load_sample(
+                {
+                    "seed": 7,
+                    "data": {
+                        "format": "derived_webdataset",
+                        "train_manifest": str(manifest),
+                        "val_manifest": str(manifest),
+                        "output_size": 32,
+                        "grayscale": True,
+                        "mask_as_condition_mask": True,
+                        "mask_as_loss_mask": True,
+                    },
+                    "condition": {"mode": "masked_replace"},
+                },
+                frame_id=1,
+                split="validation",
+                clip_name="clip-000000",
+            )
+            self.assertIn("target_rgb_np", inference_sample)
+            self.assertTrue(torch.equal(
+                inference_sample["condition_mask"],
+                inference_sample["mano_mask"],
+            ))
+
     def test_derived_tar_reader_preserves_rgb_gaussian_overlay(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -112,8 +138,12 @@ class SequenceSplitAndDerivedTests(unittest.TestCase):
                 ),
                 seed=7,
                 include_numpy=True,
+                mask_as_condition_mask=True,
+                mask_as_loss_mask=True,
             )
             sample = dataset[0]
+            self.assertTrue(torch.equal(sample["condition_mask"], sample["mano_mask"]))
+            self.assertTrue(torch.equal(sample["loss_mask"], sample["mano_mask"]))
             target = sample["target_rgb_np"]
             condition = sample["condition_rgb_np"]
             self.assertGreater(float(condition[6, 8, 0]), float(target[6, 8, 0]) + 0.4)

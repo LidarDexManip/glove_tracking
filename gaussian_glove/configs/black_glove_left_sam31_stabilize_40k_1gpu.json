@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "model_id": "ego-clinical-black-glove-left-sam31-offset-v3",
+  "dataset_root": "gaussian_glove/data/processed_sam31_offset/left",
+  "mano_model": "mano_v1_2/models/MANO_LEFT.pkl",
+  "pose_representation": "axis_angle",
+  "resolution": 512,
+  "steps": 140000,
+  "gaussians_per_face": 4,
+  "normal_offset_max_m": 0.008,
+  "learning_rates": {
+    "surface": 0,
+    "albedo": 0.0005,
+    "opacity": 0.0002,
+    "canonical_mesh": 0,
+    "lighting": 2e-05,
+    "pose_delta": 0
+  },
+  "loss": {
+    "dssim_weight": 0.2,
+    "alpha_weight": 0.1,
+    "distortion_weight": 0.0001
+  },
+  "checkpoint_every": 5000,
+  "canonical_mesh_start_step": 0,
+  "adaptive_control": {
+    "every": 0,
+    "split_fraction": 0.08,
+    "max_gaussians": 40000,
+    "prune_start_step": 10000,
+    "opacity_prune_threshold": 0.02
+  },
+  "training_split": "all",
+  "distributed_world_size": 1,
+  "global_batch_size": 1,
+  "reference_single_gpu_frame_updates": 120000,
+  "evaluation_every": 5000,
+  "evaluation_frames": 32,
+  "visual_every": 5000,
+  "visual_frames": 12,
+  "evaluation_policy": "All quality-passing frames train. Periodic metrics are training diagnostics, not validation.",
+  "schedule_note": "Appearance stabilization from the matching SAM3.1 step_120000.pt: 20,000 additional steps, density control disabled, at most 40,000 Gaussians (existing counts retained). Surface learning rate is zero to keep geometry fixed; albedo, opacity and lighting learning rates are 0.2 times the original rates. Explicitly restore configured learning rates after loading Adam state. Same source manifests and geometry contract. No new color smoothing regularizer in this baseline.",
+  "binding": {
+    "dataset": "LIDAR-GT/ego-clinical-task/gaussian_hand_display",
+    "subject_id": "black_glove",
+    "handedness": "left"
+  },
+  "strict_surface": false,
+  "bounded_scales": true,
+  "offset_only": true,
+  "freeze_canonical_mesh": true,
+  "freeze_pose": true,
+  "require_quality_pass": true,
+  "offset_regularization": 0.001,
+  "mask_policy": "SAM 3.1 target; ignore unsupported glove cuff pixels in loss, never hard-clip render to MANO.",
+  "resume_use_config_learning_rates": true
+}

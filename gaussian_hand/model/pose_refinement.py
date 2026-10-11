@@ -16,10 +16,13 @@ def quaternion_multiply(a,b):
         aw*by-ax*bz+ay*bw+az*bx,aw*bz+ax*by-ay*bx+az*bw),-1)
 
 class PoseRefinement(nn.Module):
-    def __init__(self, frame_count):
-        super().__init__(); self.deltas=nn.Embedding(frame_count,21)
+    def __init__(self, frame_count, pose_dim=15):
+        super().__init__(); self.pose_dim=int(pose_dim)
+        self.deltas=nn.Embedding(frame_count,self.pose_dim+6)
         nn.init.zeros_(self.deltas.weight)
     def forward(self, indices,pca,quaternion,translation):
         d=self.deltas(indices)
-        q=F.normalize(quaternion_multiply(axis_angle_to_quaternion(d[...,15:18]),quaternion),dim=-1)
-        return pca+d[...,:15],q,translation+d[...,18:21]
+        rotation=d[...,self.pose_dim:self.pose_dim+3]
+        q=F.normalize(quaternion_multiply(axis_angle_to_quaternion(rotation),quaternion),dim=-1)
+        return (pca+d[...,:self.pose_dim],q,
+                translation+d[...,self.pose_dim+3:self.pose_dim+6])

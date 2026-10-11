@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "model_id": "ego-clinical-black-glove-left-sam31-offset-v3",
+  "dataset_root": "gaussian_glove/data/processed_sam31_offset/left",
+  "mano_model": "mano_v1_2/models/MANO_LEFT.pkl",
+  "pose_representation": "axis_angle",
+  "resolution": 512,
+  "steps": 120000,
+  "gaussians_per_face": 4,
+  "normal_offset_max_m": 0.008,
+  "learning_rates": {
+    "surface": 0.0005,
+    "albedo": 0.0025,
+    "opacity": 0.001,
+    "canonical_mesh": 0,
+    "lighting": 0.0001,
+    "pose_delta": 0
+  },
+  "loss": {
+    "dssim_weight": 0.2,
+    "alpha_weight": 0.1,
+    "distortion_weight": 0.0001
+  },
+  "checkpoint_every": 10000,
+  "canonical_mesh_start_step": 0,
+  "adaptive_control": {
+    "every": 5000,
+    "split_fraction": 0.08,
+    "max_gaussians": null,
+    "prune_start_step": 10000,
+    "opacity_prune_threshold": 0.02
+  },
+  "training_split": "all",
+  "distributed_world_size": 1,
+  "global_batch_size": 1,
+  "reference_single_gpu_frame_updates": 120000,
+  "evaluation_every": 10000,
+  "evaluation_frames": 32,
+  "visual_every": 10000,
+  "visual_frames": 12,
+  "evaluation_policy": "All quality-passing frames train. Periodic metrics are training diagnostics, not validation.",
+  "schedule_note": "Single-GPU fallback uses 120,000 optimizer steps and scales control/checkpoint intervals to preserve the four-GPU frame-update budget.",
+  "binding": {
+    "dataset": "LIDAR-GT/ego-clinical-task/gaussian_hand_display",
+    "subject_id": "black_glove",
+    "handedness": "left"
+  },
+  "strict_surface": false,
+  "bounded_scales": true,
+  "offset_only": true,
+  "freeze_canonical_mesh": true,
+  "freeze_pose": true,
+  "require_quality_pass": true,
+  "offset_regularization": 0.001,
+  "mask_policy": "SAM 3.1 target; ignore unsupported glove cuff pixels in loss, never hard-clip render to MANO."
+}

@@ -1,0 +1,8 @@
+__pycache__/
+*.orig
+
+# Large local data lives on /data and is linked here.
+/data
+
+# Training checkpoints, renders, and review media are generated artifacts.
+/outputs/

@@ -21,10 +21,17 @@ def main() -> None:
     parser.add_argument("--clip", default=None, help="Select one clip, e.g. clip-000017 or 000017; it must belong to --split.")
     parser.add_argument("--frame", type=int, default=None, help="Load this exact frame ID instead of using --sample-index.")
     parser.add_argument("--steps", type=int, default=None, help="Override configured diffusion steps; useful for fast baseline previews.")
+    parser.add_argument("--guidance-scale", type=float, default=None, help="Override classifier-free guidance for inference.")
+    parser.add_argument("--controlnet-scale", type=float, default=None, help="Override ControlNet conditioning strength for inference.")
+    parser.add_argument("--output", type=Path, default=None, help="Output directory override for this inference sample.")
     args = parser.parse_args()
     if (args.checkpoint is None) == (not args.pretrained):
         parser.error("Provide --checkpoint for a trained model, or use --pretrained (but not both).")
     config = load_json_config(args.config)
+    if args.guidance_scale is not None:
+        config.setdefault("inference", {})["guidance_scale"] = args.guidance_scale
+    if args.controlnet_scale is not None:
+        config.setdefault("inference", {})["controlnet_scale"] = args.controlnet_scale
     sample = load_sample(config, frame_id=args.frame, sample_index=args.sample_index, split=args.split, clip_name=args.clip)
     restorer = build_restorer(config)
     if args.checkpoint is not None:
@@ -32,7 +39,7 @@ def main() -> None:
     steps = args.steps or config.get("inference", {}).get("steps", 30)
     print(f"Generating on {restorer.device_name} with {steps} diffusion steps.")
     result = run_inference(restorer, sample, config, steps=steps)
-    output = Path(config.get("output_dir", "outputs/hand_restoration/inference"))
+    output = args.output or Path(config.get("output_dir", "outputs/hand_restoration/inference"))
     output.mkdir(parents=True, exist_ok=True)
     save_experiment_inputs(sample, output)
     save_rgb(output / "generated.png", result.generated)

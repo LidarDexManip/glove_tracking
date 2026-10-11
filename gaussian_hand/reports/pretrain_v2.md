@@ -128,7 +128,7 @@ models, including P0001/right, rather than reusing that old checkpoint.
 Preparation only (reruns audit/export into the chosen output directory):
 
 ```bash
-source /data/szeng87/venvs/gaussian-hand/bin/activate
+conda activate glove-hot3d
 python -m gaussian_hand.prepare_subjects --workers 6
 python -m gaussian_hand.review_preparation --root outputs/gaussian_hand/pretrain_v2
 ```

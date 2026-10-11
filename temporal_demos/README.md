@@ -106,10 +106,10 @@ curated demonstration batch, not an unbiased evaluation or a new training split.
 
 ## Historical single-hand run
 
-From the repository root, activate the existing gaussian-hand environment:
+From the repository root, activate the shared Conda environment:
 
 ```bash
-source /data/szeng87/venvs/gaussian-hand/bin/activate
+conda activate glove-hot3d
 CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 python -m temporal_demos.select_clips \
   --output outputs/hand_restoration/NEW_DEMO/screening
 CUDA_VISIBLE_DEVICES=0 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=1 \

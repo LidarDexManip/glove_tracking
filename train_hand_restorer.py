@@ -288,6 +288,8 @@ def make_derived_dataset(config: dict, manifest: Path, include_numpy: bool = Fal
         seed=config.get("seed", 0),
         include_numpy=include_numpy,
         mask_member=data.get("mask_member", "mask.png"),
+        mask_as_condition_mask=data.get("mask_as_condition_mask", False),
+        mask_as_loss_mask=data.get("mask_as_loss_mask", False),
     )
 
 
@@ -487,7 +489,7 @@ def save_run_metadata(
 @torch.no_grad()
 def validation_loss(
     restorer, loader, accelerator, seed: int, max_batches: int | None,
-    hand_loss_weight: float,
+    hand_loss_weight: float, background_loss_weight: float,
 ) -> dict[str, float]:
     restorer.controlnet.eval()
     total = torch.zeros(
@@ -502,6 +504,7 @@ def validation_loss(
             condition_mask=batch.get("condition_mask"),
             edit_mask=batch.get("loss_mask", batch.get("edit_mask")),
             hand_loss_weight=hand_loss_weight,
+            background_loss_weight=background_loss_weight,
             generator=generator,
             return_statistics=True,
         )
@@ -733,6 +736,8 @@ def main() -> None:
         if write_header:
             log_writer.writeheader()
     hand_loss_weight = float(train_cfg.get("hand_loss_weight", 1.0))
+    background_loss_weight = float(
+        train_cfg.get("background_loss_weight", 1.0))
 
     global_step = int(progress.global_step) if exact_resume else 0
     samples_seen = int(progress.samples_seen) if exact_resume else 0
@@ -774,6 +779,7 @@ def main() -> None:
                         condition_mask=batch.get("condition_mask"),
                         edit_mask=batch.get("loss_mask", batch.get("edit_mask")),
                         hand_loss_weight=hand_loss_weight,
+                        background_loss_weight=background_loss_weight,
                         return_statistics=True,
                     )
                     pending_statistics += batch_statistics.double()
@@ -804,6 +810,7 @@ def main() -> None:
                     validation_metrics = validation_loss(
                         restorer, val_loader, accelerator, validation_seed,
                         max_validation_batches, hand_loss_weight,
+                        background_loss_weight,
                     )
                 now = time.perf_counter()
                 step_seconds = now - previous_step_end

@@ -29,7 +29,7 @@ Run the new sample audit without changing historical evidence:
 
 ```bash
 CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=1 \
-  /data/szeng87/venvs/gaussian-hand/bin/python \
+  conda run -n glove-hot3d python \
   -m gaussian_hand.audit_prepared_diffusion_dataset --retained
 ```
 

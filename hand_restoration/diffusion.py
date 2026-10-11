@@ -24,10 +24,13 @@ def regional_weighted_mse(
     squared_error: torch.Tensor,
     edit_mask: torch.Tensor | None,
     hand_loss_weight: float,
+    background_loss_weight: float = 1.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return the weighted MSE and detached sums/counts for regional logging."""
     if hand_loss_weight < 1.0:
         raise ValueError("hand_loss_weight must be at least 1.0")
+    if background_loss_weight < 0.0:
+        raise ValueError("background_loss_weight must be non-negative")
     if squared_error.ndim != 4:
         raise ValueError("squared_error must be a BCHW tensor")
 
@@ -42,7 +45,10 @@ def regional_weighted_mse(
         latent_mask = F.adaptive_max_pool2d(mask, squared_error.shape[-2:]).float()
 
     channels = squared_error.shape[1]
-    weights = 1.0 + (float(hand_loss_weight) - 1.0) * latent_mask
+    weights = (
+        float(background_loss_weight) * (1.0 - latent_mask)
+        + float(hand_loss_weight) * latent_mask
+    )
     weighted_error_sum = (squared_error * weights).sum()
     weighted_count = weights.sum() * channels
     unweighted_error_sum = squared_error.sum()
@@ -167,6 +173,7 @@ class ControlNetHandRestorer(torch.nn.Module):
         condition_mask: torch.Tensor | None = None,
         edit_mask: torch.Tensor | None = None,
         hand_loss_weight: float = 1.0,
+        background_loss_weight: float = 1.0,
         generator: torch.Generator | None = None,
         return_statistics: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
@@ -207,7 +214,8 @@ class ControlNetHandRestorer(torch.nn.Module):
             target = self.noise_scheduler.get_velocity(latents, noise, timesteps)
         squared_error = (prediction.float() - target.float()).square()
         loss, statistics = regional_weighted_mse(
-            squared_error, edit_mask, hand_loss_weight
+            squared_error, edit_mask, hand_loss_weight,
+            background_loss_weight,
         )
         if return_statistics:
             return loss, statistics

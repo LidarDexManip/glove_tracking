@@ -12,6 +12,7 @@ import torch
 
 from .conditions import ConditionConfig
 from .data_config import resolve_clip_splits
+from .derived_dataset import DerivedHandRestorationDataset
 from .diffusion import ControlNetHandRestorer, DiffusionConfig
 from .hot3d_dataset import Hot3DSingleFrameDataset
 from .hugg_aria_conditioning import paste_crop_with_mask
@@ -49,6 +50,53 @@ def load_sample(
     data = config["data"]
     if split not in {"train", "validation"}:
         raise ValueError("split must be train or validation")
+    if data.get("format", "raw_hot3d") == "derived_webdataset":
+        root = Path(__file__).resolve().parents[1]
+        manifest_key = "train_manifest" if split == "train" else "val_manifest"
+        manifest_value = data.get(manifest_key)
+        if not manifest_value:
+            raise ValueError(f"No {split} manifest configured.")
+        manifest = Path(manifest_value)
+        if not manifest.is_absolute():
+            manifest = root / manifest
+        dataset = DerivedHandRestorationDataset(
+            manifest=manifest,
+            output_size=data.get("output_size", 512),
+            grayscale=data.get("grayscale", True),
+            condition=ConditionConfig(**config.get("condition", {})),
+            seed=config.get("seed", 0),
+            include_numpy=True,
+            mask_member=data.get("mask_member", "mask.png"),
+            mask_as_condition_mask=data.get("mask_as_condition_mask", False),
+            mask_as_loss_mask=data.get("mask_as_loss_mask", False),
+        )
+        if clip_name is not None:
+            normalized = Path(clip_name).stem
+            dataset.samples = [
+                record for record in dataset.samples
+                if record.get("clip_id") == normalized
+                or Path(record.get("sequence_id", "")).name == normalized
+            ]
+            if not dataset.samples:
+                raise ValueError(
+                    f"Clip {clip_name} is not part of the configured {split} split.")
+        if frame_id is not None:
+            matches = [
+                index for index, record in enumerate(dataset.samples)
+                if int(record["frame_id"]) == int(frame_id)
+            ]
+            if not matches:
+                raise ValueError(
+                    f"Frame {frame_id:06d} is not present in the {split} manifest.")
+            if len(matches) > 1 and clip_name is None:
+                raise ValueError(
+                    f"Frame {frame_id:06d} occurs in more than one clip; "
+                    "provide --clip.")
+            sample_index = matches[0]
+        if not 0 <= sample_index < len(dataset):
+            raise IndexError(
+                f"sample-index {sample_index} is outside dataset size {len(dataset)}")
+        return dataset[sample_index]
     train_clips, val_clips, _ = resolve_clip_splits(config, Path(__file__).resolve().parents[1])
     clip_tars = train_clips if split == "train" else val_clips
     if not clip_tars:

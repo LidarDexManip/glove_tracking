@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "model_id": "ego-clinical-black-glove-right-sam31-offset-v3-2gpu",
+  "dataset_root": "gaussian_glove/data/processed_sam31_offset/right",
+  "mano_model": "mano_v1_2/models/MANO_RIGHT.pkl",
+  "pose_representation": "axis_angle",
+  "resolution": 512,
+  "steps": 60000,
+  "gaussians_per_face": 4,
+  "normal_offset_max_m": 0.008,
+  "learning_rates": {
+    "surface": 0.0005,
+    "albedo": 0.0025,
+    "opacity": 0.001,
+    "canonical_mesh": 0,
+    "lighting": 0.0001,
+    "pose_delta": 0
+  },
+  "loss": {
+    "dssim_weight": 0.2,
+    "alpha_weight": 0.1,
+    "distortion_weight": 0.0001
+  },
+  "checkpoint_every": 5000,
+  "canonical_mesh_start_step": 0,
+  "adaptive_control": {
+    "every": 2500,
+    "split_fraction": 0.08,
+    "max_gaussians": null,
+    "prune_start_step": 5000,
+    "opacity_prune_threshold": 0.02
+  },
+  "training_split": "all",
+  "distributed_world_size": 2,
+  "global_batch_size": 2,
+  "reference_single_gpu_frame_updates": 120000,
+  "evaluation_every": 5000,
+  "evaluation_frames": 32,
+  "visual_every": 5000,
+  "visual_frames": 12,
+  "evaluation_policy": "All quality-passing frames train. Periodic metrics are training diagnostics, not validation.",
+  "schedule_note": "Two GPUs per hand, one frame per rank and mean gradients. 60,000 optimizer steps = 120,000 frame updates. Density, pruning, checkpoint, preview and evaluation intervals preserve the single-GPU frame-update schedule; learning rates are unchanged. This preserves the frame budget, not numerical equivalence to 120,000 single-GPU optimizer steps. Fresh SAM3.1 initialization only; GPU allocation and multi-GPU density-growth smoke test required before formal launch.",
+  "binding": {
+    "dataset": "LIDAR-GT/ego-clinical-task/gaussian_hand_display",
+    "subject_id": "black_glove",
+    "handedness": "right"
+  },
+  "strict_surface": false,
+  "bounded_scales": true,
+  "offset_only": true,
+  "freeze_canonical_mesh": true,
+  "freeze_pose": true,
+  "require_quality_pass": true,
+  "offset_regularization": 0.001,
+  "mask_policy": "SAM 3.1 target; ignore unsupported glove cuff pixels in loss, never hard-clip render to MANO."
+}

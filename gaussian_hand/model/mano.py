@@ -31,17 +31,29 @@ def quaternion_to_axis_angle(quaternion: torch.Tensor) -> torch.Tensor:
 class LearnableMANO(nn.Module):
     """MANO LBS whose template correction participates in every posed mesh."""
 
-    def __init__(self, model_path: str, num_pca_comps: int = 15, handedness: str = "right") -> None:
+    def __init__(self, model_path: str, num_pca_comps: int = 15,
+                 handedness: str = "right",
+                 pose_representation: str = "pca") -> None:
         super().__init__()
+        if pose_representation not in ("pca", "axis_angle"):
+            raise ValueError(
+                "pose_representation must be 'pca' or 'axis_angle'")
+        self.pose_representation = pose_representation
+        self.pose_dim = num_pca_comps if pose_representation == "pca" else 45
         self.layer = smplx.MANO(
-            model_path=model_path, is_rhand=handedness == "right", use_pca=True,
-            num_pca_comps=num_pca_comps, flat_hand_mean=False,
+            model_path=model_path, is_rhand=handedness == "right",
+            use_pca=pose_representation == "pca",
+            num_pca_comps=num_pca_comps,
+            flat_hand_mean=pose_representation == "axis_angle",
         )
         if handedness not in ("left", "right"):
             raise ValueError(handedness)
         if handedness == "left":
             right = smplx.MANO(str(Path(model_path).with_name("MANO_RIGHT.pkl")),
-                               is_rhand=True, use_pca=True, num_pca_comps=num_pca_comps)
+                               is_rhand=True,
+                               use_pca=pose_representation == "pca",
+                               num_pca_comps=num_pca_comps,
+                               flat_hand_mean=pose_representation == "axis_angle")
             if (self.layer.shapedirs[:, 0] - right.shapedirs[:, 0]).abs().sum() < 1:
                 self.layer.shapedirs[:, 0] *= -1
         self.layer.requires_grad_(False)
@@ -57,7 +69,12 @@ class LearnableMANO(nn.Module):
             wrist_t_world = wrist_t_world[None]
             betas = betas[None]
         global_orient = quaternion_to_axis_angle(wrist_q_wxyz)
-        hand_pose = torch.einsum("bi,ij->bj", pca, self.layer.hand_components)
+        if pca.shape[-1] != self.pose_dim:
+            raise ValueError(
+                f"Expected {self.pose_dim}D {self.pose_representation} pose, "
+                f"got shape {tuple(pca.shape)}")
+        hand_pose = (torch.einsum("bi,ij->bj", pca, self.layer.hand_components)
+                     if self.pose_representation == "pca" else pca)
         full_pose = torch.cat((global_orient, hand_pose), dim=-1)
         full_pose = full_pose + self.layer.pose_mean
         vertices, _ = lbs(
@@ -69,7 +86,7 @@ class LearnableMANO(nn.Module):
     def canonical(self, betas: torch.Tensor) -> torch.Tensor:
         batch = 1 if betas.ndim == 1 else len(betas)
         device, dtype = betas.device, betas.dtype
-        zeros_pose = torch.zeros((batch, 15), device=device, dtype=dtype)
+        zeros_pose = torch.zeros((batch, self.pose_dim), device=device, dtype=dtype)
         identity = torch.zeros((batch, 4), device=device, dtype=dtype)
         identity[:, 0] = 1
         zeros_t = torch.zeros((batch, 3), device=device, dtype=dtype)

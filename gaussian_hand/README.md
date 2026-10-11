@@ -142,12 +142,12 @@ Generated data is on the `/data`-backed `outputs` symlink:
 
 ## Environment and training
 
-Use `/data/szeng87/venvs/gaussian-hand` (Python 3.10, PyTorch 2.11.0+cu128,
+Use the `glove-hot3d` Conda environment (Python 3.10, PyTorch 2.11.0+cu128,
 gsplat 1.5.3; see `requirements.txt`). Activation puts ninja on PATH for CUDA
-extension compilation. Keep checkpoints and environments on `/data`.
+extension compilation. Keep checkpoints on `/data`.
 
 ```bash
-source /data/szeng87/venvs/gaussian-hand/bin/activate
+conda activate glove-hot3d
 CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.run \
   --standalone --nproc-per-node=4 -m gaussian_hand.train \
   --config gaussian_hand/configs/train/P0001_right_512.json \

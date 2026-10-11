@@ -1,9 +1,11 @@
 accelerate==1.14.0
 chumpy==0.70
 diffusers==0.39.0
+gsplat==1.5.3
 hand_tracking_toolkit @ git+https://github.com/facebookresearch/hand_tracking_toolkit.git@2bb94ccec72d512ec499eb75f36571d77e44fbd7
 huggingface_hub==1.14.0
 imageio==2.37.0
+ninja==1.13.2
 numpy==2.2.6
 opencv-python==4.13.0.92
 Pillow==12.2.0
